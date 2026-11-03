@@ -1,0 +1,1508 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bureau des agents</title>
+<style>
+  :root { --fond: #1b1410; --texte: #f1e3c6; --filet: #4a3424; --bouton: #3b2a20; }
+  html, body { margin: 0; height: 100%; background: var(--fond); color: var(--texte); font: 15px/1.5 Consolas, monospace; }
+  /* Le dessin centré dans les deux tiers de gauche, le panneau dans le tiers de droite. */
+  body { display: flex; }
+  #scene { flex: 1; min-width: 0; overflow: auto; display: flex; justify-content: center; align-items: center; }
+  #scene.ville { align-items: flex-start; }
+  #plateau { position: relative; flex: none; }
+  canvas { display: block; image-rendering: pixelated; }
+  canvas.cliquable { cursor: pointer; }
+  .etiquette { position: absolute; transform: translateX(-50%); padding: 1px 8px; border-radius: 4px;
+    background: rgba(27, 20, 16, .85); color: var(--texte); font-size: 13px; white-space: nowrap; }
+  .etiquette.maison { cursor: pointer; }
+  .etiquette.active { outline: 2px solid #f6d365; }
+  .etiquette.notebook { font-size: 11px; padding: 0 6px; }
+  /* La pancarte agrandie : son dessin en gros pixels, la légende écrite par-dessus.
+     Elle grossit depuis sa place et y retourne (transform, posé par le code). */
+  #feuille { position: absolute; z-index: 2; cursor: pointer; transition: transform .25s ease-out; }
+  #feuille[hidden] { display: none; }
+  #feuille canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+  #feuille .ligne { position: absolute; display: flex; align-items: center; color: #2b1d16; line-height: 1; white-space: nowrap; }
+  #infos { flex: none; width: 33.33%; box-sizing: border-box; overflow-y: auto; padding: 12px 16px; border-left: 2px solid var(--filet); }
+  #infos div { overflow-wrap: anywhere; }
+  #barre { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  #titre { font-size: 18px; color: #f6d365; }
+  #infos h2 { margin: 14px 0 4px; font-size: 13px; font-weight: normal; text-transform: uppercase;
+    letter-spacing: 1px; color: #b89b72; border-bottom: 1px solid var(--filet); }
+  #infos h2.avec-entetes { border-bottom: none; margin-bottom: 0; }
+  #infos .agent { margin-bottom: 6px; }
+  #infos .detail { padding-left: 12px; opacity: .8; }
+  #retour { font: inherit; font-size: 16px;
+    color: var(--texte); background: var(--bouton); border: 2px solid #f6d365;
+    border-radius: 6px; padding: 6px 14px; cursor: pointer; }
+  #retour[hidden] { display: none; }
+  #onglet { font: inherit; font-size: 14px; margin-left: auto; color: var(--texte); background: var(--bouton);
+    border: 2px solid var(--filet); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+  #onglet[hidden] { display: none; }
+  /* La liste d'étapes prend la place du dessin, dans les deux tiers de gauche. */
+  #scene[hidden], #etapes[hidden] { display: none; }
+  #etapes { flex: 1; min-width: 0; box-sizing: border-box; overflow-y: auto; padding: 16px 32px; }
+  #etapes div { overflow-wrap: anywhere; }
+  #etapes h2 { margin: 18px 0 6px; font-size: 14px; font-weight: normal; text-transform: uppercase;
+    letter-spacing: 1px; color: #b89b72; border-bottom: 1px solid var(--filet); }
+  #etapes h2:first-child { margin-top: 0; font-size: 18px; color: #f6d365; text-transform: none; letter-spacing: 0; }
+  #etapes .etape { margin-top: 8px; font-size: 16px; }
+  #etapes .etape.fait { opacity: .55; }
+  #etapes .etape.en_cours { color: #f6d365; }
+  #etapes .detail { padding-left: 28px; opacity: .8; }
+  /* Un bloc à copier : police fixe, fond foncé, bouton Copier en haut à droite. */
+  #etapes .code { position: relative; margin: 6px 0 4px 28px; }
+  #etapes .code pre { margin: 0; padding: 10px 14px; overflow-x: auto; white-space: pre; font: 14px/1.45 Consolas, monospace;
+    background: color-mix(in srgb, #000 35%, var(--fond)); border: 1px solid var(--filet); border-radius: 6px; }
+  #etapes .code button { position: absolute; top: 6px; right: 6px; font: inherit; font-size: 12px; color: var(--texte);
+    background: var(--bouton); border: 1px solid var(--filet); border-radius: 4px; padding: 1px 8px; cursor: pointer; }
+  .attente { opacity: .6; }
+  /* Une jauge : son nom, puis sa valeur, colorée selon le seuil. */
+  .jauge { white-space: nowrap; word-spacing: -.35em; }
+  /* Les agents en colonnes : une ligne par agent, ses cellules séparées d'un
+     trait, puis ce qu'il fait, sur toute la largeur. */
+  .tableau { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: center; }
+  /* Toujours une seule ligne : ce qui dépasse sa colonne se coupe en « … » ;
+     le texte entier s'affiche au survol. */
+  .tableau .cellule { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 10px; }
+  .tableau .cellule > * { vertical-align: middle; }
+  .tableau .effort { margin-right: 6px; }
+  .tableau .cellule.premiere { padding-left: 0; }
+  .tableau .cellule:not(.premiere) { border-left: 1px solid var(--filet); }
+  .tableau .titre { color: #f6d365; }
+  .tableau .entete { font-size: 12px; color: #b89b72; border-bottom: 1px solid var(--filet); margin-bottom: 4px; }
+  /* Les boîtes, comme le suivi des modifications d'un notebook : une bande à
+     gauche réunit tous les sous-agents ; sous chaque rédacteur, une boîte plus
+     étroite, à sa propre bande, réunit ses relecteurs. Chaque boîte a ses cinq
+     colonnes égales, à sa largeur : plus étroite, elle rétrécit toutes ses
+     colonnes un peu, au lieu d'écraser la première. */
+  .tableau .groupe { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: center;
+    border-left: 3px solid color-mix(in srgb, #f6d365 35%, transparent); padding-left: 10px; margin: 2px 0 4px; }
+  .tableau .groupe.relecteurs { margin-left: 14px; font-size: .92em;
+    border-left-color: color-mix(in srgb, #b89b72 55%, transparent); }
+  .tableau .fait { grid-column: 1 / -1; opacity: .7; margin-bottom: 8px; white-space: normal; }
+  /* Comme un notebook : le gestionnaire en tête ; un filet plein de 40 % pour
+     chaque agent (un module) ; ••• pour chacun de ses relecteurs (une cellule).
+     Le repère est centré sur la ligne du titre (le rôle de l'agent), dans la
+     couleur du texte, atténuée : le titre reste à gauche, le repère au milieu. */
+  .tableau .nom { grid-column: 1 / -1; color: #f6d365; position: relative; margin-top: 6px; }
+  .tableau .nom .repere { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); pointer-events: none;
+    color: var(--texte); }
+  .tableau .nom .repere.filet { width: 40%; border-top: 2px solid color-mix(in srgb, var(--texte) 45%, transparent); }
+  .tableau .nom .repere.points { letter-spacing: .5em; padding-left: .5em; opacity: .5; }
+  /* Le gestionnaire : un double filet, un cran au-dessus du filet d'un agent. */
+  .tableau .nom .repere.double { width: 40%; height: 6px; box-sizing: border-box;
+    border-top: 2px solid color-mix(in srgb, var(--texte) 45%, transparent);
+    border-bottom: 2px solid color-mix(in srgb, var(--texte) 45%, transparent); }
+  .tableau .pale { opacity: .45; }
+  .tableau .bascule { cursor: pointer; }
+  .tableau .fait.attend { color: #f2b33d; opacity: 1; }
+  .effort { display: inline-flex; gap: 2px; }
+  .effort i { width: 5px; height: 10px; background: var(--filet); }
+  .effort i.plein { background: #f6d365; }
+  /* L'utilisation : 5h, 7j, le coût de la session et l'anti-veille, en quatre colonnes. */
+  #limites { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  /* Une colonne ne déborde jamais sur sa voisine : un texte trop long finit par « … ». */
+  #limites > * { padding: 0 10px; overflow: hidden; text-overflow: ellipsis; }
+  #limites > :first-child { padding-left: 0; }
+  #limites > * + * { border-left: 1px solid var(--filet); }
+</style>
+</head>
+<body>
+<div id="scene" class="ville"><div id="plateau"><canvas id="ecran"></canvas><div id="feuille" hidden></div></div></div>
+<div id="etapes" hidden></div>
+<div id="infos">
+  <div id="barre"><button id="retour" hidden title="Retour à la ville (Échap, ou clic sur la porte)">← Ville</button><span id="titre">Ville</span><button id="onglet" hidden title="Bascule entre le dessin du bureau et la liste d'étapes">Étapes</button></div>
+  <h2>Utilisation</h2>
+  <div id="limites" class="attente">En attente de Claude Code…</div>
+  <div id="liste"></div>
+</div>
+<script>
+'use strict'
+// La ville des agents : une maison par session Claude Code ouverte. Un clic
+// sur une maison montre son bureau ; « ← Ville », Échap ou la porte en ressort.
+// Fichiers voisins, rechargés en boucle :
+//  - donnees.js         : le plan et les images (écrit par outils/construire.py) ;
+//  - registre.js        : les sessions ouvertes (écrit par le mod) ;
+//  - sessions/<id>.js   : les agents présents d'une session (écrit par son mod).
+//
+// Dans un bureau, Claude est le gestionnaire ; chaque subagent est un employé.
+// Un bureau, c'est un notebook. La journée d'un employé, phase par phase :
+//   entre → prend (son mandat, chez le gestionnaire) → va (à son bureau)
+//   → assis (au travail) → livre (son travail au gestionnaire) → remet → sort.
+// L'auditeur suit la même journée : le gestionnaire l'appelle, il vient
+// chercher le document et le vérifie à son propre bureau.
+// La page garde sa propre mémoire des agents : un nouveau venu entre au moment
+// où elle le voit ; un absent part remettre son travail au moment où il disparaît.
+
+const PAS = 0.16      // durée d'une pose de marche, en secondes
+const IMAGE = 0.3     // durée d'une image d'animation du décor
+const REBOND = 0.25   // durée d'une frappe au clavier
+const SILENCE = 60000 // une session muette depuis une minute a disparu
+const LOT = 5         // un terrain de la ville : 5 × 5 tuiles
+const CADENCE = 1 / 15 // 15 images par seconde suffisent : une pose dure au moins 0,16 s
+
+// Les symboles des bulles, en pixels (5 × 5).
+const GLYPHES = {
+  '?': ['.###.', '#...#', '..##.', '.....', '..#..'],
+  // Un S barré : un string, dans certains langages.
+  '$': ['.###.', '#.#..', '.###.', '..#.#', '.###.'],
+  '!': ['..#..', '..#..', '..#..', '.....', '..#..'],
+  '>': ['.#...', '..#..', '...#.', '..#..', '.#...'],
+  '+': ['.....', '..#..', '.###.', '..#..', '.....'],
+  '*': ['.....', '.#.#.', '..#..', '.#.#.', '.....'],
+  '✓': ['.....', '....#', '...#.', '#.#..', '.#...'],
+  '§': ['###..', '#.##.', '#..#.', '#..#.', '####.'],
+  // Un visage fâché, sourcils froncés et bouche pleine de symboles : il sacre.
+  '🤬': ['#...#', '.#.#.', '.....', '#.#.#', '.#.#.'],
+  // Un visage neutre, bouche plate : des remarques, rien de grave.
+  '😐': ['.....', '.#.#.', '.....', '.###.', '.....'],
+  // Une main levée : il attend ta permission.
+  '✋': ['.#.#.', '.#.#.', '#####', '#####', '.###.'],
+}
+
+// La légende de la pancarte : ce que fait l'agent, puis ce qui en sort. Un
+// symbole, un seul sens : le choix du symbole d'un outil est dans le mod
+// (register.tsx).
+const LEGENDE = [
+  ['?', 'lit'], ['$', 'écrit'], ['>', 'commande'], ['+', 'agent'], ['*', 'autre'],
+  ['!', 'écarts'], ['✓', 'approuvé'], ['§', 'document'], ['🤬', 'erreurs'], ['😐', 'remarques'], ['✋', "t'attend"],
+]
+// L'encre d'un symbole sur la pancarte, quand elle n'est pas brune.
+const ENCRE_LEGENDE = { '🤬': '#d0402f', '😐': '#b7791f', '✋': '#b7791f' }
+// Celui qui attend ta permission : la main levée, sur fond ambre.
+const AMBRE = '#f2b33d'
+
+const scene = document.getElementById('scene')
+const plateau = document.getElementById('plateau')
+const canvas = document.getElementById('ecran')
+const ctx = canvas.getContext('2d')
+
+let plan = null
+let theme = {}             // le thème du mois, tel que bureau.json le décrit
+let images = null
+let versionDonnees = ''
+let registre = {}
+const sessions = new Map() // id → { projet, etat, acteurs, premiereLecture }
+let vue = null             // null : la ville ; sinon l'id de la session visitée
+let facteur = 1
+let maisons = []           // { id, x, y } en pixels, pour les clics
+// La gueule de chaque plante carnivore, par numéro d'objet : son état et
+// jusqu'à quand il dure.
+const gueules = new Map()
+// La pose de l'objet à l'emplacement de la plante, par numéro d'objet : de
+// base ou pose2, et jusqu'à quand.
+const poses = new Map()
+let dispositionAffichee = ''
+
+// Une page locale ne peut pas lire un .json, mais elle peut charger un script.
+function charger(fichier, suite) {
+  const s = document.createElement('script')
+  s.src = `${fichier}?t=${Date.now()}`
+  s.onload = () => { s.remove(); suite() }
+  s.onerror = () => s.remove()
+  document.head.appendChild(s)
+}
+
+// Chaque image (une forme par couleur) devient un petit canvas, dessiné une fois.
+function rendre(f) {
+  const c = document.createElement('canvas')
+  c.width = f.w
+  c.height = f.h
+  const g = c.getContext('2d')
+  // Chaque suite de pixels (« M x y h n … ») devient un rectangle. Pas de Path2D :
+  // la carte graphique confond deux formes en miroir (les toiles des coins) et
+  // ressert la première, décalée, à la place de la seconde.
+  for (const couche of f.couches) {
+    g.fillStyle = couche.fill
+    for (const [, x, y, n] of couche.d.matchAll(/M(\d+) (\d+)h(\d+)/g)) g.fillRect(+x, +y, +n, 1)
+  }
+  return c
+}
+
+// Le thème du mois : celui dont « mois » est le mois courant, ou celui que
+// « theme » force dans bureau.json (« auto » : selon la date ; un nom qui
+// n'est pas un thème, comme « aucun » : pas de thème).
+function themeDe(p) {
+  const voulu = p.theme ?? 'auto'
+  if (voulu !== 'auto') return p.themes?.[voulu] ? voulu : null
+  const mois = new Date().getMonth() + 1
+  return Object.entries(p.themes ?? {}).find(([, t]) => t.mois === mois)?.[0] ?? null
+}
+
+// Relu toutes les 3 s : le thème change de lui-même au premier du mois.
+function preparer() {
+  if (!window.BUREAU_PLAN || !window.BUREAU_ASSETS) return
+  const nomTheme = themeDe(window.BUREAU_PLAN)
+  const version = JSON.stringify(window.BUREAU_PLAN) + JSON.stringify(window.BUREAU_ASSETS) + nomTheme
+  if (version === versionDonnees) return
+  versionDonnees = version
+  plan = window.BUREAU_PLAN
+  theme = plan.themes?.[nomTheme] ?? {}
+  const a = window.BUREAU_ASSETS
+  // Un dessin du thème remplace celui de tous les jours qui porte le même nom.
+  const propres = a.themes?.[nomTheme] ?? {}
+  const personnages = { ...a.personnages, ...propres.personnages }
+  const decor = { ...a.decor, ...propres.decor }
+  // Le dessin commun du thème (« cadre ») l'emporte sur une place dessinée
+  // pour tous les jours (« cadre-droit ») : le mur reste aux couleurs du mois.
+  for (const place of Object.keys(a.decor)) {
+    if (propres.decor?.[commun(place)] && !propres.decor[place]) delete decor[place]
+  }
+  images = { personnages: {}, decor: {} }
+  for (const [nom, poses] of Object.entries(personnages)) {
+    images.personnages[nom] = Object.fromEntries(Object.entries(poses).map(([p, f]) => [p, rendre(f)]))
+  }
+  for (const [nom, etats] of Object.entries(decor)) {
+    images.decor[nom] = Object.fromEntries(Object.entries(etats).map(([e, fs]) => [e, fs.map(rendre)]))
+  }
+  dispositionAffichee = ''
+}
+
+// ------------------------------------------------------------- les sessions
+
+function lireRegistre() {
+  registre = window.BUREAU_REGISTRE ?? {}
+}
+
+function relireSessions() {
+  const ids = new Set([...Object.keys(registre), ...sessions.keys()])
+  for (const id of ids) charger(`sessions/${encodeURIComponent(id)}.js`, () => appliquer(id))
+}
+
+// Toutes les phases où l'employé est encore au travail : à son bureau, ou
+// parti faire passer le contrôle mécanique à la photocopieuse.
+const A_LA_COPIEUSE = ['copie', 'imprime', 'verdict', 'retour']
+const EN_POSTE = ['entre', 'prend', 'va', 'assis', ...A_LA_COPIEUSE]
+
+// Une place pour un nouveau venu. Un agent lancé par un autre agent encore au
+// travail (l'auditeur qu'un rédacteur appelle) marche jusqu'au bureau de
+// celui-ci et se tient debout à côté : c'est un visiteur. Deux au plus par
+// bureau (relecteurs de forme et de fond), le second un pas plus loin dans
+// l'allée. Les autres prennent le premier bureau libre, et passent d'abord
+// chez le gestionnaire.
+const VISITEURS_MAX = 2
+function attribuer(s, a) {
+  const presents = [...s.acteurs.values()].filter(x => EN_POSTE.includes(x.phase))
+  const hote = a.parent && s.acteurs.get(a.parent)
+  if (hote && EN_POSTE.includes(hote.phase) && hote.role === 'occupant') {
+    const rangs = new Set(presents.filter(x => x.role === 'visiteur' && x.desk === hote.desk).map(x => x.rang))
+    const rang = Array.from({ length: VISITEURS_MAX }, (_, i) => i).find(i => !rangs.has(i))
+    if (rang !== undefined) return { desk: hote.desk, role: 'visiteur', rang }
+  }
+  const pris = new Set(presents.filter(x => x.role === 'occupant').map(x => x.desk))
+  const libre = plan.postes.findIndex((_, i) => !pris.has(i))
+  return libre < 0 ? null : { desk: libre, role: 'occupant' }
+}
+
+// La file indienne. Personne ne passe la porte moins d'un pas derrière le
+// précédent, et personne n'arrive au comptoir du gestionnaire avant que le
+// précédent l'ait quitté : on attend dehors, ou à son bureau. Croiser
+// quelqu'un, ou passer à côté d'un visiteur debout dans l'allée, reste permis.
+const ecart = () => plan.tuile / plan.vitesse // un pas, en secondes
+const longueurDe = points => points.slice(1).reduce((n, b, i) => n + Math.abs(b.x - points[i].x) + Math.abs(b.y - points[i].y), 0)
+function reserver(s, a, maintenant) {
+  a.t0 = maintenant
+  if (a.phase === 'entre') a.t0 = Math.max(a.t0, s.porteLibre ?? 0)
+  const versComptoir = a.role === 'occupant' && (a.phase === 'entre' || a.phase === 'livre')
+  if (versComptoir) {
+    const duree = longueurDe(trajetDe(a)) / plan.vitesse
+    a.t0 = Math.max(a.t0, (s.comptoirLibre ?? 0) - duree)
+    const arret = a.phase === 'entre' ? (plan.prise ?? 1) : (plan.remise ?? 1.5)
+    s.comptoirLibre = a.t0 + duree + arret + ecart()
+  }
+  if (a.phase === 'entre') s.porteLibre = a.t0 + ecart()
+}
+
+// Le mod garde un agent fini dix secondes dans son fichier, avec sa conclusion.
+const enCours = etat => etat.agents.filter(a => !a.fini)
+
+// ----------------------------------------------------------- les signaux
+// Quand une session t'attend (une permission, ou Claude a fini et attend ta
+// réponse) : un son et une notification Windows, si la page en a le droit ;
+// sinon, le titre de l'onglet clignote jusqu'à ton retour.
+const TITRE = document.title
+const DELAI_PERMISSION = 1500
+let clignote = null // { minuterie, id, ton } : la session qui fait clignoter, et pourquoi
+let audio = null
+function signaler(texte, ton, id) {
+  sonner(ton)
+  if ('Notification' in window && Notification.permission === 'granted') {
+    try {
+      new Notification('Bureau des agents', { body: texte, tag: 'bureau' })
+      return
+    } catch {
+      // Le navigateur refuse : on clignote.
+    }
+  }
+  if (document.hasFocus()) return
+  clearInterval(clignote?.minuterie)
+  // ✋ seulement pour une permission : une fin de tour ne demande rien.
+  const symbole = ton === 'permission' ? '✋' : '✓'
+  let i = 0
+  clignote = { id, ton, minuterie: setInterval(() => { document.title = i++ % 2 ? TITRE : `${symbole} ${texte}` }, 1000) }
+}
+function arreterClignote() {
+  clearInterval(clignote?.minuterie)
+  clignote = null
+  document.title = TITRE
+}
+window.addEventListener('focus', arreterClignote)
+document.addEventListener('visibilitychange', () => { if (!document.hidden) arreterClignote() })
+
+// Un son de console portable (onde carrée) : deux notes montantes pour une
+// permission, une seule pour « à toi ». Muet tant que la page n'a pas reçu de clic.
+function sonner(ton) {
+  try {
+    audio ??= new AudioContext()
+    const notes = ton === 'permission' ? [660, 880] : [523]
+    notes.forEach((f, i) => {
+      const o = audio.createOscillator()
+      const g = audio.createGain()
+      o.type = 'square'
+      o.frequency.value = f
+      const t0 = audio.currentTime + i * 0.15
+      g.gain.setValueAtTime(0.06, t0)
+      g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.14)
+      o.connect(g).connect(audio.destination)
+      o.start(t0)
+      o.stop(t0 + 0.15)
+    })
+  } catch {
+    // Pas de son : la notification ou le titre suffit.
+  }
+}
+
+// Au premier clic : la page demande le droit de notifier, et débloque le son.
+document.addEventListener('click', () => {
+  if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission()
+  audio ??= new AudioContext()
+  audio.resume?.()
+}, { once: true })
+
+function appliquer(id) {
+  const etat = window.BUREAU_SESSIONS?.[id]
+  if (!etat || !plan) return
+  if (etat.fermee || Date.now() - etat.battement > SILENCE) {
+    sessions.delete(id)
+    if (vue === id) entrer(null)
+    if (clignote?.id === id) arreterClignote()
+    return
+  }
+  let s = sessions.get(id)
+  if (!s) {
+    s = { acteurs: new Map(), premiereLecture: true }
+    sessions.set(id, s)
+  }
+  s.projet = etat.projet
+  s.etat = etat
+  // Les signaux : au passage à « t'attend », ou quand le gestionnaire finit son
+  // tour sans agent au travail (à toi). Un sous-agent qui finit ne sonne pas :
+  // le gestionnaire reprend la main, et c'est sa fin à lui qui compte.
+  // Pas à la première lecture : on ne rejoue pas le passé.
+  const attend = attendMoi(etat)
+  const travaille = etat.claude.isWorking
+  const libre = !(etat.claude.attente > 0) && enCours(etat).length === 0
+  // Une permission accordée d'office (le mode auto) se lève en moins d'une
+  // seconde : on ne sonne que si elle attend encore après DELAI_PERMISSION.
+  if (!attend) s.attendDepuis = s.signale = null
+  else if (s.premiereLecture) s.signale = true
+  else {
+    s.attendDepuis ??= Date.now()
+    if (!s.signale && Date.now() - s.attendDepuis >= DELAI_PERMISSION) {
+      s.signale = true
+      signaler(`${etat.projet} : Claude attend ta permission`, 'permission', id)
+    }
+  }
+  if (!s.premiereLecture && s.travaillait && !travaille && libre && !attend) signaler(`${etat.projet} : Claude a fini, à toi`, 'fini', id)
+  // Le titre cesse de clignoter dès que sa raison tombe : la permission est
+  // réglée, ou Claude s'est remis au travail.
+  if (clignote?.id === id && (clignote.ton === 'permission' ? !attend : travaille)) arreterClignote()
+  s.travaillait = travaille
+  // bureau.html#<id> ouvre directement cette maison.
+  if (vue === null && decodeURIComponent(location.hash.slice(1)) === id) {
+    history.replaceState(null, '', location.pathname)
+    entrer(id)
+  }
+
+  const maintenant = performance.now() / 1000
+  const presents = new Set()
+  for (const a of etat.agents) {
+    let connu = s.acteurs.get(a.id)
+    if (connu) connu.conclusion = a.conclusion
+    if (a.fini) continue
+    presents.add(a.id)
+    // Il était sur le départ, et on l'a relancé : il revient comme un nouveau venu.
+    if (connu && !EN_POSTE.includes(connu.phase)) {
+      s.acteurs.delete(a.id)
+      connu = undefined
+    }
+    if (connu) {
+      connu.glyph = a.glyph
+      connu.permission = a.permission
+      connu.notebook = a.notebook
+      connu.verdicts = a.verdicts ?? []
+      // Chaque contrôle lancé est un aller-retour à la photocopieuse, fait dès
+      // qu'il est assis, dans l'ordre.
+      connu.aCopier += Math.max(0, (a.controles ?? 0) - connu.controlesVus)
+      connu.controlesVus = a.controles ?? 0
+      continue
+    }
+    const place = attribuer(s, a)
+    if (!place) continue // plus de bureau libre : il n'apparaît que dans la liste
+    // À l'ouverture de la page, ceux qui sont déjà là sont à leur place : pas de défilé.
+    const acteur = {
+      personnage: a.personnage,
+      type: a.type,
+      notebook: a.notebook,
+      desk: place.desk,
+      role: place.role,
+      rang: place.rang ?? 0,
+      phase: s.premiereLecture ? 'assis' : 'entre',
+      t0: maintenant,
+      glyph: a.glyph,
+      permission: a.permission,
+      // Les contrôles passés avant qu'on le voie ne sont pas rejoués.
+      controlesVus: a.controles ?? 0,
+      passage: a.controles ?? 0,
+      aCopier: 0,
+      verdicts: a.verdicts ?? [],
+    }
+    if (acteur.phase === 'entre') reserver(s, acteur, maintenant)
+    s.acteurs.set(a.id, acteur)
+  }
+  // Un employé qui a fini ne sort pas tout de suite : il va d'abord porter
+  // son travail au gestionnaire. Le visiteur, lui, donne sa conclusion sur
+  // place (il sacre, ou il coche en vert), puis sort.
+  for (const [aid, acteur] of s.acteurs) {
+    if (!presents.has(aid) && EN_POSTE.includes(acteur.phase)) {
+      acteur.phase = acteur.role === 'visiteur' ? 'conclut' : 'livre'
+      reserver(s, acteur, maintenant)
+    }
+  }
+  s.premiereLecture = false
+}
+
+const isActive = s => s.etat.claude.isWorking || enCours(s.etat).length > 0
+// Une session t'attend : Claude ou un de ses agents demande ta permission.
+const attendMoi = etat => Boolean(etat.claude.permission || enCours(etat).some(a => a.permission))
+const isAuTravail = c => c.isWorking && !(c.attente > 0)
+
+function ordonnees() {
+  return [...sessions.entries()]
+    .sort(([a, sa], [b, sb]) => sa.projet.localeCompare(sb.projet) || a.localeCompare(b))
+}
+
+// ------------------------------------------------------------ la navigation
+
+function entrer(id) {
+  vue = id
+  fermerPancarte(true)
+  dispositionAffichee = ''
+  document.getElementById('retour').hidden = id === null
+  scene.classList.toggle('ville', id === null)
+}
+
+document.getElementById('retour').addEventListener('click', () => entrer(null))
+// Dans un bureau, les deux tiers de gauche montrent le dessin ou la liste d'étapes
+// que Claude tient à jour (outil « etapes » du mod). La liste défile à la main ;
+// le panneau de droite garde ses infos.
+let onglet = 'bureau'
+document.getElementById('onglet').addEventListener('click', () => {
+  onglet = onglet === 'bureau' ? 'etapes' : 'bureau'
+  texteAffiche = ''
+  document.getElementById('etapes').scrollTop = 0
+})
+// Échap ferme d'abord la pancarte agrandie, puis ramène à la ville.
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return
+  if (isPancarteOuverte) fermerPancarte()
+  else if (vue !== null) entrer(null)
+})
+// Pancarte ouverte, un clic n'importe où la referme, et ne fait rien d'autre.
+document.addEventListener('click', e => {
+  if (!isPancarteOuverte) return
+  e.stopPropagation()
+  fermerPancarte()
+}, true)
+
+function maisonSous(e) {
+  const x = e.offsetX / facteur
+  const y = e.offsetY / facteur
+  return maisons.find(m => x >= m.x && x < m.x + 48 && y >= m.y && y < m.y + 48)
+}
+// Dans un bureau, la porte (en bas) ramène à la ville.
+function surLaPorte(e) {
+  const tx = Math.floor(e.offsetX / facteur / plan.tuile)
+  const ty = Math.floor(e.offsetY / facteur / plan.tuile)
+  return ty === plan.rangees - 1 && tx >= plan.porte.x && tx < plan.porte.x + 2
+}
+canvas.addEventListener('click', e => {
+  if (!plan) return
+  if (vue !== null) {
+    if (surLaPorte(e)) entrer(null)
+    else if (surLaPancarte(e)) ouvrirPancarte()
+    return
+  }
+  const m = maisonSous(e)
+  if (m) entrer(m.id)
+})
+canvas.addEventListener('mousemove', e => {
+  if (!plan) return
+  canvas.classList.toggle('cliquable', vue === null ? Boolean(maisonSous(e)) : surLaPorte(e) || surLaPancarte(e))
+})
+
+// Taille du canvas et agrandissement. La ville défile verticalement ; le bureau
+// tient dans l'écran. Facteur entier quand c'est possible : les pixels restent nets.
+function disposer(largeur, hauteur) {
+  const cle = `${vue}|${largeur}x${hauteur}|${scene.clientWidth}x${scene.clientHeight}`
+  if (cle === dispositionAffichee) return
+  dispositionAffichee = cle
+  canvas.width = largeur
+  canvas.height = hauteur
+  const hauteurVisible = vue === null ? Math.min(hauteur, 11 * plan.tuile) : hauteur
+  const f = Math.min(scene.clientWidth / largeur, scene.clientHeight / hauteurVisible)
+  facteur = f >= 1 ? Math.floor(f) : f
+  canvas.style.width = `${largeur * facteur}px`
+  canvas.style.height = `${hauteur * facteur}px`
+}
+window.addEventListener('resize', () => { dispositionAffichee = ''; fermerPancarte(true) })
+
+// Les étiquettes en texte net, posées par-dessus le canvas : noms des dépôts
+// dans la ville, noms des notebooks dans un bureau.
+function etiqueter(items) {
+  const cle = items.map(i => `${i.classe}:${i.texte ?? i.glyphe}:${i.x}:${i.y}`).join('|') + `@${facteur}`
+  if (plateau.dataset.etiquettes === cle) return
+  plateau.dataset.etiquettes = cle
+  plateau.querySelectorAll('.etiquette').forEach(e => e.remove())
+  for (const i of items) {
+    const div = document.createElement('div')
+    div.className = `etiquette ${i.classe}`
+    if (i.glyphe) div.appendChild(svgGlyphe(i.glyphe, i.taille * facteur, i.encre))
+    else div.textContent = i.texte
+    div.style.left = `${i.x * facteur}px`
+    div.style.top = `${i.y * facteur}px`
+    if (i.taille) div.style.fontSize = `${i.taille * facteur}px`
+    if (i.clic) div.addEventListener('click', i.clic)
+    plateau.appendChild(div)
+  }
+}
+
+// --------------------------------------------------------------- le dessin
+
+// Les places du mur (« cadre-droit », « coin-gauche »…) : sans dessin propre,
+// une place prend le dessin commun (« cadre », « coin »).
+const COTE = /-(gauche|droite|droit)$/
+const commun = nom => nom.replace(COTE, '')
+const dessinDe = nom => images.decor[nom] ?? images.decor[commun(nom)]
+
+// « duree » : le temps d'une image d'animation, si l'objet a son propre rythme.
+function imageDecor(nom, etatVoulu, t, duree = IMAGE) {
+  const etats = dessinDe(nom)
+  if (!etats) return null
+  const imgs = (etatVoulu && etats[etatVoulu]) || Object.values(etats)[0]
+  return imgs[Math.floor(t / duree) % imgs.length]
+}
+
+// Un objet posé sur sa tuile, aligné sur le bas de la tuile.
+function poser(nom, tx, ty, etatVoulu, t, duree) {
+  const img = imageDecor(nom, etatVoulu, t, duree)
+  if (img) ctx.drawImage(img, Math.round(tx * plan.tuile), Math.round((ty + 1) * plan.tuile) - img.height)
+}
+
+// La gueule d'une plante carnivore : fermée longtemps (6 à 12 s, au hasard,
+// pour ne pas battre la mesure), elle s'ouvre lentement, puis claque d'un coup.
+const SUITE_GUEULE = { fermee: ['entrouverte', 0.5], entrouverte: ['ouverte', 0.5], ouverte: ['fermee', null] }
+function etatGueule(n, t) {
+  let g = gueules.get(n)
+  if (!g) gueules.set(n, g = { etat: 'fermee', fin: t + 6 + Math.random() * 6 })
+  while (t >= g.fin) {
+    const [suivant, duree] = SUITE_GUEULE[g.etat]
+    g.etat = suivant
+    g.fin += duree ?? 6 + Math.random() * 6
+  }
+  return g.etat
+}
+
+// La plante passe à sa pose2 (images « pose2-<état>-<n> »), ou en revient,
+// au hasard toutes les 15 à 60 minutes.
+function pose2(n, t) {
+  const pause = () => (15 + Math.random() * 45) * 60
+  let p = poses.get(n)
+  if (!p) poses.set(n, p = { pose: '', fin: t + pause() })
+  while (t >= p.fin) {
+    p.pose = p.pose ? '' : 'pose2-'
+    p.fin += pause()
+  }
+  return p.pose
+}
+
+// L'état à dessiner pour l'objet n° n : celui de sa gueule ou de bureau.json,
+// sinon le premier de sa pose de base. Un dessin sans pose2 reste dans sa pose de base.
+function etatObjet(o, n, t) {
+  const noms = Object.keys(dessinDe(o.asset) ?? {})
+  let etat = o.gueule ? etatGueule(n, t) : o.etat
+  if (!noms.includes(etat)) etat = noms.find(e => !e.startsWith('pose2-'))
+  if (o.asset !== 'plante') return etat
+  const pose = pose2(n, t)
+  return noms.includes(pose + etat) ? pose + etat : etat
+}
+
+// Un symbole en SVG, de la taille voulue : chaque point de sa grille 5 × 5
+// devient un carré. Il reste net à toute taille, même plus petit qu'un pixel
+// du dessin, là où le canvas ne peut pas descendre sous 5 pixels.
+function svgGlyphe(glyphe, taille, encre = '#2b1d16') {
+  const NS = 'http://www.w3.org/2000/svg'
+  const svg = document.createElementNS(NS, 'svg')
+  svg.setAttribute('viewBox', '0 0 5 5')
+  svg.setAttribute('width', taille)
+  svg.setAttribute('height', taille)
+  svg.setAttribute('shape-rendering', 'crispEdges')
+  GLYPHES[glyphe].forEach((rangee, j) => [...rangee].forEach((c, k) => {
+    if (c !== '#') return
+    const r = document.createElementNS(NS, 'rect')
+    for (const [a, v] of [['x', k], ['y', j], ['width', 1], ['height', 1], ['fill', encre]]) r.setAttribute(a, v)
+    svg.appendChild(r)
+  }))
+  return svg
+}
+
+// La pancarte, dans le coin droit, en face de la plante. Petite, elle ne porte
+// que des gribouillis (son état « petite ») ; un clic l'agrandit (ouvrirPancarte).
+let zonePancarte = null // { x, y, l, h } en pixels du dessin
+function dessinerPancarte() {
+  const p = plan.pancarte
+  const img = p && imageDecor('pancarte', 'petite', 0)
+  if (!img) return (zonePancarte = null)
+  const T = plan.tuile
+  const x0 = Math.round(p.x * T)
+  const y0 = Math.round((p.y + 1) * T) - img.height
+  zonePancarte = { x: x0, y: y0, l: img.width, h: img.height }
+  ctx.drawImage(img, x0, y0)
+}
+// La feuille de papier, bordure comprise, en pixels du dessin
+// (dessins_initiaux.py) : agrandie, on ne montre qu'elle, et la légende
+// s'écrit dans son intérieur blanc, un pixel en dedans de la bordure.
+const FEUILLE = { x: 1, y: 2, l: 14, h: 15 }
+
+// La feuille agrandie, posée sur le dessin : elle part de sa place sur la
+// pancarte et grossit jusqu'au centre ; un clic n'importe où, ou Échap, l'y renvoie.
+const feuille = document.getElementById('feuille')
+let isPancarteOuverte = false
+function placeFeuille() {
+  const z = zonePancarte
+  const k = Math.min(canvas.height * facteur * 0.9 / FEUILLE.h, canvas.width * facteur * 0.9 / FEUILLE.l)
+  const l = FEUILLE.l * k
+  const h = FEUILLE.h * k
+  const x = (canvas.width * facteur - l) / 2
+  const y = (canvas.height * facteur - h) / 2
+  // Le transform qui la ramène sur la feuille de la petite pancarte.
+  const s = facteur / k
+  const depart = `translate(${(z.x + FEUILLE.x) * facteur - x}px, ${(z.y + FEUILLE.y) * facteur - y}px) scale(${s})`
+  return { x, y, l, h, k, depart }
+}
+function ouvrirPancarte() {
+  const img = imageDecor('pancarte', 'vierge', 0)
+  if (!img || !zonePancarte) return
+  const f = placeFeuille()
+  // Les lignes se partagent la hauteur de l'intérieur, avec une demi-ligne de
+  // marge en haut et en bas : la dernière reste sur le papier.
+  const dedans = { x: 1, y: 1, h: FEUILLE.h - 2 }
+  const pas = dedans.h / (LEGENDE.length + 1)
+  const taille = pas * 0.75
+  const fond = document.createElement('canvas')
+  fond.width = FEUILLE.l
+  fond.height = FEUILLE.h
+  fond.getContext('2d').drawImage(img, -FEUILLE.x, -FEUILLE.y)
+  const lignes = LEGENDE.map(([symbole, mot], i) => {
+    const div = document.createElement('div')
+    div.className = 'ligne'
+    div.style.left = `${(dedans.x + 0.6) * f.k}px`
+    div.style.top = `${(dedans.y + pas * (i + 0.5) + (pas - taille) / 2) * f.k}px`
+    div.style.height = `${taille * f.k}px`
+    div.style.fontSize = `${taille * f.k}px`
+    div.style.gap = `${taille * 0.5 * f.k}px`
+    div.appendChild(svgGlyphe(symbole, taille * 0.8 * f.k, ENCRE_LEGENDE[symbole]))
+    div.appendChild(document.createTextNode(mot))
+    return div
+  })
+  feuille.replaceChildren(fond, ...lignes)
+  Object.assign(feuille.style, {
+    left: `${f.x}px`, top: `${f.y}px`, width: `${f.l}px`, height: `${f.h}px`,
+    transformOrigin: '0 0', transition: 'none', transform: f.depart,
+  })
+  feuille.hidden = false
+  isPancarteOuverte = true
+  // Un temps pour que le départ soit posé, puis elle grossit.
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    feuille.style.transition = ''
+    feuille.style.transform = 'none'
+  }))
+}
+function fermerPancarte(isTout = false) {
+  if (!isPancarteOuverte) return
+  isPancarteOuverte = false
+  if (isTout || !zonePancarte) {
+    feuille.hidden = true
+    return
+  }
+  feuille.style.transform = placeFeuille().depart
+  feuille.addEventListener('transitionend', () => { if (!isPancarteOuverte) feuille.hidden = true }, { once: true })
+}
+function surLaPancarte(e) {
+  const z = zonePancarte
+  const x = e.offsetX / facteur
+  const y = e.offsetY / facteur
+  return Boolean(z) && x >= z.x && x < z.x + z.l && y >= z.y && y < z.y + z.h
+}
+
+function carreler(nom, tx, ty, largeur, hauteur) {
+  const img = imageDecor(nom, null, 0)
+  if (!img) return
+  for (let y = ty; y < ty + hauteur; y++) {
+    for (let x = tx; x < tx + largeur; x++) ctx.drawImage(img, x * plan.tuile, y * plan.tuile)
+  }
+}
+
+// Une pose ; la droite est la gauche retournée.
+function dessinerPerso(nom, dir, pas, x, y) {
+  const poses = images.personnages[nom] ?? images.personnages.employe ?? Object.values(images.personnages)[0]
+  const img = poses?.[`${dir === 'droite' ? 'gauche' : dir}${pas}`]
+  if (!img) return
+  x = Math.round(x)
+  y = Math.round(y)
+  if (dir === 'droite') {
+    ctx.save()
+    ctx.translate(x + img.width, y)
+    ctx.scale(-1, 1)
+    ctx.drawImage(img, 0, 0)
+    ctx.restore()
+  } else {
+    ctx.drawImage(img, x, y)
+  }
+}
+
+function bulle(glyph, x, y, fond = '#ffffff', encre = '#2b1d16') {
+  const motif = GLYPHES[glyph]
+  if (!motif) return
+  // À droite de la tête, sauf au bord droit du dessin : alors à gauche.
+  x = Math.round(x) + 10 + 9 > canvas.width ? Math.round(x) - 4 : Math.round(x) + 10
+  y = Math.round(y) - 10
+  ctx.fillStyle = '#2b1d16'
+  ctx.fillRect(x, y, 9, 9)
+  ctx.fillStyle = fond
+  ctx.fillRect(x + 1, y + 1, 7, 7)
+  ctx.fillStyle = encre
+  motif.forEach((rangee, j) => [...rangee].forEach((c, i) => {
+    if (c === '#') ctx.fillRect(x + 2 + i, y + 2 + j, 1, 1)
+  }))
+}
+
+// ------------------------------------------------------------ les places
+
+// Chacun est assis derrière son bureau, face à nous : seules la tête et les
+// épaules dépassent. Le bureau se dessine par-dessus le personnage.
+function placeAssise(meuble, place) {
+  const T = plan.tuile
+  const img = imageDecor(meuble, null, 0)
+  const w = img?.width ?? 32
+  const h = img?.height ?? 20
+  return { x: place.x * T + w / 2 - 8, y: (place.y + 1) * T - h - 10 }
+}
+const siegeGestionnaire = () => placeAssise('bureau-gestionnaire', plan.gestionnaire)
+const allee = () => (plan.porte.x + 0.5) * plan.tuile
+// Là où l'on prend son mandat et remet son travail : devant le gestionnaire.
+const comptoir = () => ({ x: allee(), y: (plan.gestionnaire.y + 1) * plan.tuile + 2 })
+// Un bureau de la moitié gauche a sa photocopieuse à sa gauche et son
+// visiteur à sa droite (côté allée) ; l'inverse pour la moitié droite.
+const isAGauche = desk => plan.postes[desk].x < plan.colonnes / 2
+
+// L'occupant est assis derrière le bureau ; le visiteur, debout à côté,
+// tourné vers lui ; le second visiteur, un pas plus loin dans l'allée.
+function placeDe(a) {
+  if (a.role !== 'visiteur') return placeAssise('poste', plan.postes[a.desk])
+  const T = plan.tuile
+  const p = plan.postes[a.desk]
+  const w = imageDecor('poste', null, 0)?.width ?? 32
+  const pas = (a.rang ?? 0) * 16
+  return { x: isAGauche(a.desk) ? p.x * T + w + pas : p.x * T - 16 - pas, y: (p.y + 1) * T - 20 }
+}
+
+// Chaque bureau a sa photocopieuse, du côté du mur : à gauche d'un bureau de
+// gauche, à droite d'un bureau de droite. Le bureau fait deux tuiles de large.
+function copieuseDe(desk) {
+  const p = plan.postes[desk]
+  return { x: isAGauche(desk) ? p.x - 1 : p.x + 2, y: p.y }
+}
+
+// Derrière sa photocopieuse, face à nous, à la hauteur de son siège.
+function placeCopieuse(a) {
+  return { x: copieuseDe(a.desk).x * plan.tuile, y: placeAssise('poste', plan.postes[a.desk]).y }
+}
+
+function trajetDe(a) {
+  const T = plan.tuile
+  const place = placeDe(a)
+  const porte = { x: allee(), y: plan.rangees * T - T }
+  const dehors = { x: allee(), y: plan.rangees * T + T }
+  const couloir = { x: allee(), y: place.y }
+  // Le visiteur va droit au bureau de celui qui l'a appelé, et en repart de même.
+  if (a.role === 'visiteur') {
+    const aller = [dehors, porte, couloir, place]
+    return a.phase === 'entre' ? aller : aller.reverse()
+  }
+  if (a.phase === 'entre') return [dehors, porte, comptoir()]
+  if (a.phase === 'va') return [comptoir(), couloir, place]
+  if (a.phase === 'livre') return [place, couloir, comptoir()]
+  // Un pas de côté jusqu'à sa photocopieuse, puis retour.
+  if (a.phase === 'copie') return [place, placeCopieuse(a)]
+  if (a.phase === 'retour') return [placeCopieuse(a), place]
+  return [comptoir(), porte, dehors]
+}
+
+// Où en est le personnage sur son trajet, et vers où il regarde.
+function surTrajet(points, distance) {
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1]
+    const b = points[i]
+    const longueur = Math.abs(b.x - a.x) + Math.abs(b.y - a.y)
+    const dir = b.y !== a.y ? (b.y < a.y ? 'haut' : 'bas') : (b.x < a.x ? 'gauche' : 'droite')
+    const dernier = i === points.length - 1
+    if (distance <= longueur || dernier) {
+      const t = longueur === 0 ? 1 : Math.min(distance / longueur, 1)
+      return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, dir, fini: dernier && distance >= longueur }
+    }
+    distance -= longueur
+  }
+}
+
+const SUIVANTE = { entre: 'prend', va: 'assis', livre: 'remet', copie: 'imprime', retour: 'assis' }
+// Les arrêts : combien de temps, et ce qui suit.
+const PAUSES = {
+  prend: ['prise', 1, 'va'],
+  remet: ['remise', 1.5, 'sort'],
+  imprime: ['impression', 1.5, 'verdict'],
+  verdict: ['verdict', 1.2, 'retour'],
+  conclut: ['conclusion', 2.5, 'sort'],
+}
+
+// Fait avancer un employé dans sa journée. Rend sa position s'il marche,
+// null s'il est immobile, 'parti' quand il a passé la porte.
+function progresser(a, t) {
+  if (a.phase === 'assis') {
+    if (a.aCopier <= 0 || plan.photocopieuses === false) return null
+    a.aCopier -= 1
+    a.passage += 1
+    a.phase = 'copie'
+    a.t0 = t
+  }
+  if (t < a.t0 && !PAUSES[a.phase]) return { ...surTrajet(trajetDe(a), 0), fini: false }
+  const pause = PAUSES[a.phase]
+  if (pause) {
+    const [cle, defaut, suite] = pause
+    if (t - a.t0 < (plan[cle] ?? defaut)) return null
+    a.phase = suite
+    a.t0 = t
+    if (PAUSES[a.phase]) return null
+  }
+  const pos = surTrajet(trajetDe(a), (t - a.t0) * plan.vitesse)
+  if (!pos.fini) return pos
+  if (a.phase === 'sort') return 'parti'
+  a.phase = a.role === 'visiteur' && a.phase === 'entre' ? 'assis' : SUIVANTE[a.phase]
+  a.t0 = t
+  return null
+}
+
+// Le verdict du passage en cours : le n-ième contrôle a le n-ième verdict.
+const verdictDe = a => a.verdicts[a.passage - 1] ?? 'ok'
+
+function activiteDe(type) {
+  return plan.activites?.[type] ?? plan.activites?.['*'] ?? 'travail'
+}
+
+// ----------------------------------------------------------------- la ville
+
+// Une rangée d'arbres en haut, puis des terrains de 5 × 5 tuiles, chacun avec
+// sa maison, son chemin et sa portion de route.
+function dessinerVille(t) {
+  const T = plan.tuile
+  const parRangee = plan.ville?.maisonsParRangee ?? 4
+  const liste = ordonnees()
+  const rangees = Math.max(1, Math.ceil(liste.length / parRangee))
+  const colonnes = parRangee * LOT
+  disposer(colonnes * T, (1 + rangees * LOT) * T)
+
+  carreler('herbe', 0, 0, colonnes, 1 + rangees * LOT)
+  for (let x = 0; x < colonnes; x += 2) poser('arbre', x, 0, null, t)
+  maisons = []
+  for (let r = 0; r < rangees; r++) {
+    const y0 = 1 + r * LOT
+    carreler('route', 0, y0 + 4, colonnes, 1)
+    for (let c = 0; c < parRangee; c++) {
+      const x0 = c * LOT
+      poser('arbre', x0, y0 + 1, null, t)
+      poser('arbre', x0 + 4, y0 + 2, null, t)
+      // Les objets que le thème pose sur chaque terrain, en tuiles depuis son coin.
+      for (const o of theme.terrain ?? []) poser(o.asset, x0 + o.x, y0 + o.y, o.etat ?? null, t, o.rythme)
+      const entree = liste[r * parRangee + c]
+      if (!entree) continue
+      const [id, s] = entree
+      carreler('route', x0 + 2, y0 + 3, 1, 1)
+      poser('maison', x0 + 1, y0 + 2, isActive(s) ? 'active' : 'calme', t)
+      if (attendMoi(s.etat)) bulle('✋', (x0 + 2) * T + 8, (y0 + 2) * T + 6, AMBRE)
+      maisons.push({ id, x: (x0 + 1) * T, y: y0 * T, s })
+    }
+  }
+  etiqueter(maisons.map(m => {
+    const n = enCours(m.s.etat).length
+    return {
+      classe: `maison${isActive(m.s) ? ' active' : ''}`,
+      texte: n ? `${m.s.projet} · ${n} agent${n > 1 ? 's' : ''}` : m.s.projet,
+      x: m.x + 24,
+      y: m.y + 4 * T + 2,
+      clic: () => entrer(m.id),
+    }
+  }))
+}
+
+// ---------------------------------------------------------------- un bureau
+
+function dessinerBureau(s, t) {
+  const T = plan.tuile
+  disposer(plan.colonnes * T, plan.rangees * T)
+
+  carreler('sol', 0, 0, plan.colonnes, plan.rangees)
+  carreler('mur', 0, 0, plan.colonnes, 1)
+  for (let tx = 0; tx < plan.colonnes; tx++) {
+    const dansLaPorte = tx >= plan.porte.x && tx < plan.porte.x + 2
+    if (!dansLaPorte) carreler('mur-bas', tx, plan.rangees - 1, 1, 1)
+  }
+  poser('porte', plan.porte.x, plan.porte.y, null, t)
+  // Les objets du thème viennent après ceux de tous les jours : les numéros
+  // de ceux-ci (gueules, poses) ne bougent pas.
+  ;[...plan.objets, ...(theme.objets ?? [])].forEach((o, n) =>
+    poser(o.asset, o.x, o.y, etatObjet(o, n, t), t, o.rythme))
+
+  const frappe = Math.floor(t / REBOND) % 2
+  const claude = s.etat.claude
+  const acteurs = [...s.acteurs.values()]
+  // Tout ce qui peut se chevaucher (bureaux et personnages) est trié par le
+  // bas de l'image : ce qui est plus bas à l'écran passe devant.
+  const aDessiner = []
+  const ajouter = (bas, f) => aDessiner.push({ bas, f })
+
+  // Le gestionnaire, assis face à nous dans son fauteuil. Au travail, des
+  // papiers sur son bureau ; sinon (il attend ses agents, ou ta prochaine
+  // demande), un bureau vide et un cigare au bec.
+  const auTravail = isAuTravail(claude)
+  const g = plan.gestionnaire
+  const imgG = imageDecor('bureau-gestionnaire', auTravail ? 'actif' : 'inactif', t)
+  const sg = siegeGestionnaire()
+  const fauteuil = imageDecor('fauteuil', null, t)
+  const cigare = auTravail ? null : imageDecor('cigare', null, t)
+  ajouter(sg.y + 16, () => {
+    // Le haut du dossier dépasse à peine des épaules ; son bas passe derrière le bureau.
+    if (fauteuil) ctx.drawImage(fauteuil, Math.round(sg.x + 8 - fauteuil.width / 2), Math.round(sg.y + 5))
+    dessinerPerso(claude.personnage ?? 'gestionnaire', 'bas', 0, sg.x, sg.y - (auTravail ? frappe : 0))
+    if (cigare) ctx.drawImage(cigare, Math.round(sg.x), Math.round(sg.y))
+  })
+  if (imgG) ajouter((g.y + 1) * T + 0.5, () => ctx.drawImage(imgG, g.x * T, (g.y + 1) * T - imgG.height))
+  // Il approuve (✓) un travail remis ; il tend un mandat (§) à qui vient le chercher.
+  const bulleG = acteurs.some(a => a.phase === 'remet') ? '✓'
+    : acteurs.some(a => a.phase === 'prend') ? '§'
+    : auTravail ? claude.glyph : null
+  if (claude.permission) ajouter(1e6, () => bulle('✋', sg.x, sg.y, AMBRE))
+  else if (bulleG) ajouter(1e6, () => bulle(bulleG, sg.x, sg.y))
+
+  const etiquettes = []
+  dessinerPancarte()
+  // Les photocopieuses : chacune imprime pendant le contrôle de son employé,
+  // puis montre le verdict.
+  if (plan.photocopieuses !== false) {
+    plan.postes.forEach((_, i) => {
+      const c = copieuseDe(i)
+      const client = acteurs.find(a => a.desk === i && (a.phase === 'imprime' || a.phase === 'verdict'))
+      const etatC = !client ? 'repos' : client.phase === 'imprime' ? 'imprime' : verdictDe(client)
+      const img = imageDecor('photocopieuse', etatC, t)
+      if (img) ajouter((c.y + 1) * T, () => ctx.drawImage(img, c.x * T, (c.y + 1) * T - img.height))
+    })
+  }
+
+  // Une chaise derrière chaque bureau, qu'elle soit occupée ou non : le haut
+  // du dossier dépasse à peine des épaules ; son bas passe derrière le bureau.
+  const chaise = imageDecor('chaise', null, t)
+  plan.postes.forEach(p => {
+    const s = placeAssise('poste', p)
+    if (chaise) ajouter(s.y + 15.9, () => ctx.drawImage(chaise, Math.round(s.x + 8 - chaise.width / 2), Math.round(s.y + 5)))
+  })
+
+  // Les bureaux : l'animation suit le travail de celui qui est là. Le
+  // visiteur (l'auditeur) a la priorité : on voit son tampon.
+  plan.postes.forEach((p, i) => {
+    const ici = acteurs.filter(a => a.desk === i && a.phase === 'assis')
+    const travailleur = ici.find(a => a.role === 'visiteur') ?? ici[0]
+    const img = imageDecor('poste', travailleur ? activiteDe(travailleur.type) : 'inactif', t)
+    if (img) ajouter((p.y + 1) * T + 0.5, () => ctx.drawImage(img, p.x * T, (p.y + 1) * T - img.height))
+    const notebook = acteurs.find(a => a.desk === i && EN_POSTE.includes(a.phase) && a.notebook)?.notebook
+    // Sur le devant du bureau, comme une plaque : dessous, elle cacherait la
+    // tête de l'employé de la rangée suivante.
+    if (notebook) etiquettes.push({ classe: 'notebook', texte: notebook, x: p.x * T + 16, y: (p.y + 1) * T - 7 })
+  })
+  etiqueter(etiquettes)
+
+  // Les employés.
+  for (const [id, a] of s.acteurs) {
+    const pos = progresser(a, t)
+    if (pos === 'parti') {
+      s.acteurs.delete(id)
+      continue
+    }
+    if (a.role === 'visiteur' && (a.phase === 'assis' || a.phase === 'conclut')) {
+      // Debout à côté du bureau, tourné vers lui. Sa conclusion : des
+      // erreurs, il sacre (bulle rouge, il tremble) ; des remarques, un visage
+      // neutre (bulle ambre) ; rien, un crochet vert.
+      const p = placeDe(a)
+      const vers = isAGauche(a.desk) ? 'gauche' : 'droite'
+      const sacre = a.phase === 'conclut' && a.conclusion === 'erreurs'
+      const x = p.x + (sacre ? (Math.floor(t / 0.08) % 2 ? 1 : -1) : 0)
+      ajouter(p.y + 16, () => dessinerPerso(a.personnage, vers, 0, x, p.y - (a.phase === 'assis' ? frappe : 0)))
+      if (a.phase === 'assis') ajouter(1e6, () => a.permission ? bulle('✋', p.x, p.y, AMBRE) : bulle(a.glyph, p.x, p.y))
+      else if (sacre) ajouter(1e6, () => bulle('🤬', x, p.y, '#d0402f', '#2b1d16'))
+      else if (a.conclusion === 'remarques') ajouter(1e6, () => bulle('😐', p.x, p.y, '#f2b33d', '#2b1d16'))
+      else ajouter(1e6, () => bulle('✓', p.x, p.y, '#ffffff', '#2e9e46'))
+    } else if (a.phase === 'assis') {
+      const p = placeDe(a)
+      ajouter(p.y + 16, () => dessinerPerso(a.personnage, 'bas', 0, p.x, p.y - frappe))
+      // La bulle à côté de la tête : au-dessus, elle cacherait le bureau d'en haut.
+      ajouter(1e6, () => a.permission ? bulle('✋', p.x + 4, p.y + 8, AMBRE) : bulle(a.glyph, p.x + 4, p.y + 8))
+    } else if (a.phase === 'imprime' || a.phase === 'verdict') {
+      const c = placeCopieuse(a)
+      ajouter(c.y + 16, () => dessinerPerso(a.personnage, 'bas', 0, c.x, c.y))
+      if (a.phase === 'verdict') ajouter(1e6, () => bulle(verdictDe(a) === 'ecarts' ? '!' : '✓', c.x, c.y))
+    } else if (a.phase === 'prend' || a.phase === 'remet') {
+      const c = comptoir()
+      ajouter(c.y + 16, () => dessinerPerso(a.personnage, 'haut', 0, c.x, c.y))
+      if (a.phase === 'remet') ajouter(1e6, () => bulle('§', c.x, c.y))
+    } else if (pos) {
+      const pas = Math.floor((t - a.t0) / PAS) % 2
+      ajouter(pos.y + 16, () => dessinerPerso(a.personnage, pos.dir, pas, pos.x, pos.y))
+      // Il porte un document : son mandat en allant, son travail en revenant.
+      if (a.phase === 'va' || a.phase === 'livre') ajouter(1e6, () => bulle('§', pos.x, pos.y))
+      // En revenant de la photocopieuse, il rapporte le verdict.
+      if (a.phase === 'retour') ajouter(1e6, () => bulle(verdictDe(a) === 'ecarts' ? '!' : '✓', pos.x, pos.y))
+    }
+  }
+  aDessiner.sort((a, b) => a.bas - b.bas).forEach(d => d.f())
+}
+
+// Les journées avancent même quand on regarde la ville : en entrant dans une
+// maison, on trouve chacun là où il en est.
+function avancer(t) {
+  for (const [id, s] of sessions) {
+    if (id === vue) continue
+    for (const [aid, a] of s.acteurs) {
+      if (progresser(a, t) === 'parti') s.acteurs.delete(aid)
+    }
+  }
+}
+
+// ----------------------------------------------------------------- le texte
+
+const milliers = n => n.toLocaleString('fr-CA')
+// 142 300 → « 142k » ; 1 000 000 → « 1M ».
+const enK = n => n >= 1e6 ? `${+(n / 1e6).toFixed(1)}M` : n >= 1000 ? `${Math.round(n / 1000)}k` : `${n}`
+
+// « claude-opus-5-5 » → « Opus 5.5 » ; une date en suffixe tombe.
+function nomModele(id) {
+  if (!id) return null
+  // « [1m] » (la fenêtre d'un million) tombe aussi : le contexte le dit déjà.
+  const morceaux = id.replace(/^claude-/, '').replace(/\[[^\]]*\]$/, '').split('-').filter(m => !/^\d{8}$/.test(m))
+  const [famille, ...version] = morceaux
+  return `${famille[0].toUpperCase()}${famille.slice(1)}${version.length ? ` ${version.join('.')}` : ''}`
+}
+
+// L'effort en cinq cases : low, medium, high, xhigh, max.
+const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
+function barreEffort(effort) {
+  const s = document.createElement('span')
+  const n = EFFORTS.indexOf(effort) + 1
+  const cases = document.createElement('span')
+  cases.className = 'effort'
+  for (let i = 1; i <= EFFORTS.length; i++) {
+    const c = document.createElement('i')
+    if (i <= n) c.className = 'plein'
+    cases.appendChild(c)
+  }
+  s.append(cases, effort)
+  return s
+}
+
+// Des agents en colonnes : chacun { rangs: [[cellule…]…], fait }, cinq
+// cellules par rangée au plus, séparées d'un trait. Une cellule est un texte,
+// { titre }, { effort } ou { jauge: [nom, %, valeur] } ; « fait » prend toute
+// la largeur.
+const COLONNES = 5
+function tableau(lignes, entetes = []) {
+  const d = document.createElement('div')
+  d.className = 'tableau'
+  // La rangée des titres de colonnes, soulignée du filet de la section.
+  entetes.forEach((x, i) => {
+    const s = document.createElement('span')
+    s.className = i === 0 ? 'cellule entete premiere' : 'cellule entete'
+    s.textContent = x
+    d.appendChild(s)
+  })
+  rendreLignes(d, lignes)
+  return d
+}
+
+// Les lignes dans leur conteneur ; { groupe, lignes } devient une boîte.
+function rendreLignes(d, lignes) {
+  for (const l of lignes) {
+    if (l.groupe) {
+      const g = document.createElement('div')
+      g.className = `groupe ${l.groupe}`
+      rendreLignes(g, l.lignes)
+      d.appendChild(g)
+      continue
+    }
+    // Le titre : le rôle de l'agent. Un clic dessus replie ou déplie ses relecteurs.
+    // Son repère, au centre de la même ligne : « filet » (un agent), « points » (un relecteur).
+    if (l.titre) {
+      const nom = document.createElement('div')
+      nom.className = ['nom', l.classe, l.bascule ? 'bascule' : ''].filter(Boolean).join(' ')
+      nom.textContent = l.titre
+      if (l.separateur) {
+        const repere = document.createElement('span')
+        repere.className = `repere ${l.separateur}`
+        if (l.separateur === 'points') repere.textContent = '•••'
+        nom.appendChild(repere)
+      }
+      if (l.bascule) {
+        nom.addEventListener('click', () => {
+          if (!replies.delete(l.bascule)) replies.add(l.bascule)
+          texteAffiche = ''
+        })
+      }
+      d.appendChild(nom)
+    }
+    for (const rang of l.rangs) {
+      for (let i = 0; i < COLONNES; i++) {
+        const x = rang[i]
+        let s
+        if (x?.effort) s = barreEffort(x.effort)
+        else if (x?.jauge) s = jauge(...x.jauge)
+        else {
+          s = document.createElement('span')
+          if (x?.titre) s.classList.add('titre')
+          s.textContent = x?.titre ?? x ?? ''
+        }
+        s.classList.add('cellule')
+        if (i === 0) s.classList.add('premiere')
+        if (l.classe) s.classList.add(...l.classe.split(' '))
+        s.title = s.textContent
+        d.appendChild(s)
+      }
+    }
+    const f = document.createElement('div')
+    f.className = ['fait', l.attend ? 'attend' : '', l.classe].filter(Boolean).join(' ')
+    f.textContent = l.fait ?? ''
+    d.appendChild(f)
+  }
+}
+// Les agents dont les relecteurs sont repliés (un clic sur leur nom).
+const replies = new Set()
+
+// Depuis quand : « 45s », « 3m12 », « 1h05 ».
+function duree(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000))
+  if (s < 60) return `${s}s`
+  if (s < 3600) return `${Math.floor(s / 60)}m${String(s % 60).padStart(2, '0')}`
+  return `${Math.floor(s / 3600)}h${String(Math.floor(s / 60) % 60).padStart(2, '0')}`
+}
+
+// Une jauge sans barre : « 5h 92% 56m », le pourcentage en couleur — vert,
+// ambre passé 70 %, rouge passé 90 %. Les espaces autour du point sont
+// resserrées (word-spacing de .jauge) : la jauge tient dans sa colonne.
+const SEP = ' · '
+function jauge(nom, pourcent, valeur) {
+  const d = document.createElement('span')
+  d.className = 'jauge'
+  const v = document.createElement('span')
+  v.textContent = valeur
+  v.style.color = pourcent >= 90 ? '#e0604f' : pourcent >= 70 ? '#f2b33d' : '#8fcf8f'
+  if (nom) d.append(nom, SEP)
+  d.append(v)
+  return d
+}
+
+// Le contexte du gestionnaire, le temps qui reste à son cache, son modèle et
+// son effort. Le cache garde le contexte une durée fixe (« cacheMinutes » dans
+// bureau.json) après la dernière réponse ; passé ce délai, la requête suivante
+// relit tout le contexte au prix fort.
+function carteGestionnaire(c, activite) {
+  const ctx = c.contexte
+  const valeur = ctx?.tokens !== undefined ? `${enK(ctx.tokens)}/${enK(ctx.window)}` : `${ctx?.percent}%`
+  const reste = c.reponse ? (plan.cacheMinutes ?? 60) * 60000 - (Date.now() - c.reponse) : null
+  return {
+    attend: c.permission,
+    titre: `${c.permission ? '✋ ' : ''}gestionnaire`,
+    rangs: [[
+      nomModele(c.modele) ?? '?',
+      c.effort ? { effort: c.effort } : '?',
+      ctx?.percent !== undefined ? { jauge: ['', ctx.percent, valeur] } : '',
+      enK(c.out ?? 0),
+      reste === null ? '?' : c.isWorking && !(c.attente > 0) ? '↻' : reste <= 0 ? '✗' : duree(reste),
+    ]],
+    fait: c.permission ? 'attend ta permission' : activite,
+  }
+}
+
+function carteAgent(a) {
+  return {
+    attend: a.permission,
+    // Le nom affiché du type (« noms » de bureau.json), sinon le type.
+    titre: `${a.permission ? '✋ ' : ''}${plan.noms?.[a.type] ?? a.type}`,
+    rangs: [[
+      nomModele(a.modele) ?? '?',
+      a.effort ? { effort: a.effort } : '?',
+      a.ctx !== undefined ? enK(a.ctx) : '?',
+      enK(a.out ?? 0),
+      // La colonne du cache, que seul le gestionnaire connaît ; la durée d'un
+      // agent ouvre sa ligne d'activité.
+      '',
+    ]],
+    fait: a.permission ? "attend ta permission"
+      : [duree(Date.now() - a.enteredAt), a.notebook, a.activity ?? 'arrive'].filter(Boolean).join(' · '),
+  }
+}
+
+// Le script outils/rester_eveille.ps1 rafraîchit eveil.js toutes les 10 s.
+// Muet depuis 25 s : sa fenêtre a été fermée, ou le mod l'a arrêté, sans
+// qu'il puisse le dire.
+const SILENCE_EVEIL = 25000
+const heure = ms => new Date(ms).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })
+// L'anti-veille, affichée « café » (le nom d'usage de ces outils : caffeinate,
+// Caffeine) : « café : 5m », active depuis 5 minutes ; « café : ✗ », arrêtée.
+// Le deux-points la distingue des mesures de l'IA : c'est un outil de l'analyste.
+function antiVeille() {
+  const e = window.BUREAU_EVEIL
+  if (!e?.actif || Date.now() - e.battement > SILENCE_EVEIL) return 'café : ✗'
+  // En secondes sous la minute (« 40s »), puis en minutes (« 5m »), puis en heures (« 1h20 »).
+  const sec = Math.floor((Date.now() - e.debut) / 1000)
+  const min = Math.floor(sec / 60)
+  return `café : ${min >= 60 ? `${Math.floor(min / 60)}h${String(min % 60).padStart(2, '0')}` : min ? `${min}m` : `${sec}s`}`
+}
+
+// L'état git du dossier de la session, lu par le mod (sans fetch : « à tirer »
+// date du dernier fetch ou pull).
+function ficheDepot(d) {
+  if (!d) return ['Lecture en cours…']
+  if (!d.isGit) return ['Pas un dépôt git']
+  const pluriel = (n, mot) => `${n} ${mot}${n > 1 ? 's' : ''}`
+  return [
+    `Branche : ${d.branche}`,
+    d.isSuivie ? `À pousser : ${pluriel(d.aPousser, 'commit')}` : 'À pousser : branche jamais poussée',
+    ...(d.aTirer ? [`À tirer : ${pluriel(d.aTirer, 'commit')}`] : []),
+    `Non commité : ${pluriel(d.modifies, 'fichier')}`,
+  ]
+}
+const resumeDepot = d => d?.isGit && (d.aPousser || !d.isSuivie)
+  ? ` · ${d.isSuivie ? `${d.aPousser} à pousser` : 'jamais poussée'}` : ''
+
+// Un bloc à copier tel quel. La page est servie par 127.0.0.1, où le
+// presse-papiers est permis ; ouverte en fichier, la copie peut être refusée.
+function blocCode(texte) {
+  const div = document.createElement('div')
+  div.className = 'code'
+  const pre = document.createElement('pre')
+  pre.textContent = texte
+  const bouton = document.createElement('button')
+  bouton.textContent = 'Copier'
+  bouton.addEventListener('click', () => {
+    navigator.clipboard.writeText(texte).then(
+      () => { bouton.textContent = 'Copié ✓'; setTimeout(() => { bouton.textContent = 'Copier' }, 1500) },
+      () => { bouton.textContent = 'Copie refusée' })
+  })
+  div.append(pre, bouton)
+  return div
+}
+
+// La liste d'étapes d'une session : ✓ fait, ▶ en cours, ☐ à faire ; puis les notes.
+const COCHES = { fait: '✓', en_cours: '▶', a_faire: '☐' }
+function blocsEtapes(et) {
+  if (!et?.etapes?.length) return [{ texte: 'Aucune liste pour cette session. Claude la remplit avec son outil « etapes ».', classe: 'detail' }]
+  const blocs = [{ titre: et.titre ?? 'Étapes' }]
+  et.etapes.forEach((x, i) => {
+    blocs.push({ texte: `${COCHES[x.etat] ?? '☐'} ${i + 1}. ${x.texte}`, classe: `etape ${x.etat}` })
+    for (const d of x.details ?? []) blocs.push({ texte: d, classe: 'detail' })
+    if (x.code) blocs.push({ code: x.code })
+  })
+  if (et.notes?.length) {
+    blocs.push({ titre: 'En attente' })
+    for (const n of et.notes) blocs.push({ texte: n, classe: 'detail' })
+  }
+  if (et.maj) blocs.push({ texte: `Mise à jour : ${heure(et.maj)}`, classe: 'detail' })
+  return blocs
+}
+
+// Le panneau de droite, en blocs : { titre } devient un intertitre, { texte, classe } une ligne.
+let texteAffiche = ''
+function ecrireInfos() {
+  const liste = ordonnees()
+  // L'utilisation est celle du compte : la mesure la plus fraîche, peu importe
+  // la maison. Une session qui n'a encore rien mesuré ne l'écrase pas.
+  const etats = liste.map(([, s]) => s.etat)
+  const recent = etats.filter(e => e.mesure).sort((a, b) => b.mesure - a.mesure)[0]
+    ?? etats.sort((a, b) => b.battement - a.battement)[0]
+  let titre = 'Ville'
+  let bouton = null
+  let etapes = null
+  const blocs = []
+  if (vue !== null) {
+    const et = sessions.get(vue).etat.etapes
+    const reste = et ? et.etapes.filter(x => x.etat !== 'fait').length : 0
+    bouton = onglet === 'etapes' ? 'Bureau' : `Étapes${et ? ` (${reste})` : ''}`
+    if (onglet === 'etapes') etapes = blocsEtapes(et)
+  }
+  if (vue === null) {
+    blocs.push({ titre: 'Maisons' })
+    if (!liste.length) blocs.push({ texte: 'Aucune session Claude Code ouverte.' })
+    for (const [, s] of liste) {
+      const n = enCours(s.etat).length
+      const c = s.etat.claude
+      const claude = c.attente > 0 ? 'Claude attend ses agents' : c.isWorking ? 'Claude travaille' : 'Claude au repos'
+      blocs.push({ texte: s.projet, classe: 'agent' })
+      blocs.push({ texte: `${claude}${n ? ` · ${n} agent${n > 1 ? 's' : ''}` : ''}${resumeDepot(s.etat.depot)}`, classe: 'detail' })
+    }
+  } else {
+    const s = sessions.get(vue)
+    titre = s.projet
+    const c = s.etat.claude
+    const gestionnaire = c.attente > 0 ? 'attend ses agents (cigare)'
+      : c.isWorking ? (c.activity ?? 'réfléchit') : 'au repos (cigare)'
+    blocs.push({ titre: 'Dépôt' }, ...ficheDepot(s.etat.depot).map(texte => ({ texte })))
+    // Une section, comme un notebook : le gestionnaire en tête, puis
+    // chaque agent qu'il a lancé (un filet plein), ses relecteurs sous lui (•••).
+    // Un agent parti dont un relecteur travaille encore reste, en pâle.
+    const tous = s.etat.agents
+    const actifs = enCours(s.etat)
+    const lignes = [{ ...carteGestionnaire(c, gestionnaire), separateur: 'double' }]
+    // Les agents qu'un agent a lancés, dans leur boîte (et ceux qu'ils lancent, dans la leur).
+    const sous = (parent, profondeur) => {
+      const enfants = []
+      for (const e of actifs.filter(b => b.parent === parent.id)) {
+        enfants.push({ ...carteAgent(e), separateur: 'points' })
+        const petits = profondeur < 3 ? sous(e, profondeur + 1) : []
+        if (petits.length) enfants.push({ groupe: 'relecteurs', lignes: petits })
+      }
+      return enfants
+    }
+    const sousAgents = []
+    const visibles = tous.filter(a => !a.fini || actifs.some(b => b.parent === a.id))
+    for (const r of visibles.filter(a => !visibles.some(p => p.id === a.parent))) {
+      const n = actifs.filter(b => b.parent === r.id).length
+      const replie = replies.has(r.id)
+      const carte = carteAgent(r)
+      if (n) carte.titre = `${replie ? '▸' : '▾'} ${carte.titre}${replie ? ` (${n})` : ''}`
+      sousAgents.push({ ...carte, separateur: 'filet', classe: r.fini ? 'pale' : '', bascule: n ? r.id : null })
+      if (n && !replie) sousAgents.push({ groupe: 'relecteurs', lignes: sous(r, 1) })
+    }
+    if (sousAgents.length) lignes.push({ groupe: 'agents', lignes: sousAgents })
+    blocs.push({ titre: `Agents (${actifs.length + 1})`, classe: 'avec-entetes' },
+      { tableau: lignes, entetes: ['modèle', 'effort', 'contexte', 'sortie', 'cache'] })
+    // Le journal : la plus récente en haut, chacune avec son heure.
+    const journal = s.etat.journal ?? []
+    if (journal.length) {
+      blocs.push({ titre: 'Journal' })
+      for (const l of [...journal].reverse()) {
+        const d = new Date(l.t)
+        const heure = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+        blocs.push({ texte: `${heure} ${l.texte}`, classe: 'detail' })
+      }
+    }
+  }
+  // Une colonne par fenêtre d'utilisation (« 5h 80 % 1h15 », « 7j 11 % »), puis l'anti-veille.
+  // Ce que la session aurait coûté au prix de l'API (comme /cost), agents compris :
+  // celle qu'on visite, ou toutes les sessions ouvertes dans la ville.
+  const couts = (vue !== null ? [sessions.get(vue)?.etat] : etats).map(e => e?.claude?.cout).filter(x => x !== undefined)
+  const cout = couts.length ? `${couts.reduce((a, b) => a + b, 0).toLocaleString('fr-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} $ US` : null
+  const limites = [...(recent?.limites ?? 'En attente de Claude Code…').split(/\s+·\s+/), ...(cout ? [cout] : []), antiVeille()]
+  const cle = JSON.stringify([titre, bouton, limites, blocs, etapes, [...replies]])
+  if (cle === texteAffiche) return
+  texteAffiche = cle
+  document.getElementById('titre').textContent = titre
+  const b = document.getElementById('onglet')
+  b.hidden = bouton === null
+  if (bouton) b.textContent = bouton
+  const zone = document.getElementById('etapes')
+  scene.hidden = etapes !== null
+  zone.hidden = etapes === null
+  if (etapes) zone.replaceChildren(...etapes.map(x => {
+    if (x.code) return blocCode(x.code)
+    const e = document.createElement(x.titre ? 'h2' : 'div')
+    e.textContent = x.titre ?? x.texte
+    if (x.classe) e.className = x.classe
+    return e
+  }))
+  const div = document.getElementById('limites')
+  div.replaceChildren(...limites.map(texte => {
+    // « 5h 80 % 1h15 » devient une jauge ; le reste s'écrit tel quel.
+    const m = texte.match(/^(\S+) (\d+) %(?: (\S+))?$/)
+    if (m) return jauge(m[1], Number(m[2]), `${m[2]}%${m[3] ? `${SEP}${m[3]}` : ''}`)  // « 5h · 92% · 56m »
+    // Avant la première mesure, « 5h ? » : le même séparateur, sans couleur.
+    const inconnu = texte.match(/^(\S+) \?$/)
+    if (inconnu) {
+      const d = jauge(inconnu[1], 0, '?')
+      d.lastChild.style.color = ''
+      return d
+    }
+    const d = document.createElement('div')
+    d.textContent = texte
+    return d
+  }))
+  div.className = recent ? '' : 'attente'
+  document.getElementById('liste').replaceChildren(...blocs.map(b => {
+    if (b.jauge) return jauge(...b.jauge)
+    if (b.tableau) return tableau(b.tableau, b.entetes)
+    const e = document.createElement(b.titre ? 'h2' : 'div')
+    e.textContent = b.titre ?? b.texte
+    if (b.classe) e.className = b.classe
+    return e
+  }))
+}
+
+let derniereImage = 0
+
+function dessiner() {
+  requestAnimationFrame(dessiner)
+  if (!plan || !images) return
+  const t = performance.now() / 1000
+  // La petite marge évite de sauter une image de trop quand l'écran
+  // rafraîchit un rien plus tôt que prévu.
+  if (t - derniereImage < CADENCE - 0.005) return
+  derniereImage = t
+  ctx.imageSmoothingEnabled = false
+  avancer(t)
+  const s = vue === null ? null : sessions.get(vue)
+  if (s) dessinerBureau(s, t)
+  else {
+    if (vue !== null) entrer(null)
+    dessinerVille(t)
+  }
+  ecrireInfos()
+}
+
+charger('donnees.js', preparer)
+setInterval(() => charger('donnees.js', preparer), 3000)
+charger('registre.js', lireRegistre)
+setInterval(() => charger('registre.js', lireRegistre), 1000)
+charger('eveil.js', () => {})
+setInterval(() => charger('eveil.js', () => {}), 5000)
+setInterval(relireSessions, 500)
+requestAnimationFrame(dessiner)
+</script>
+</body>
+</html>

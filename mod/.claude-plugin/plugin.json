@@ -1,0 +1,7 @@
+{
+  "name": "bureau-agents",
+  "version": "0.1.0",
+  "description": "Un bureau vu d'en haut, façon Game Boy : chaque subagent entre par la porte, travaille à son poste, puis ressort.",
+  "license": "CC0-1.0",
+  "types": "./types/index.d.ts"
+}

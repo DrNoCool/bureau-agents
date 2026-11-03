@@ -1,0 +1,196 @@
+{
+  "tuile": 16,
+  "colonnes": 10,
+  "rangees": 11,
+  "echelle": 2,
+  "vitesse": 48,
+  "remise": 1.5,
+  "prise": 1,
+  "impression": 1.5,
+  "verdict": 1.2,
+  "conclusion": 2.5,
+  "cacheMinutes": 60,
+  "photocopieuses": true,
+  "theme": "auto",
+  "porte": { "x": 4, "y": 10 },
+  "gestionnaire": { "x": 3.5, "y": 2 },
+  "pancarte": { "x": 8, "y": 2 },
+  "postes": [
+    { "x": 1, "y": 5 },
+    { "x": 7, "y": 5 },
+    { "x": 1, "y": 7 },
+    { "x": 7, "y": 7 },
+    { "x": 1, "y": 9 },
+    { "x": 7, "y": 9 }
+  ],
+  "objets": [
+    { "asset": "coin-gauche", "x": 0, "y": 0 },
+    { "asset": "coin-droit", "x": 9, "y": 0 },
+    { "asset": "fenetre-gauche", "x": 1, "y": 0 },
+    { "asset": "fenetre-droite", "x": 7, "y": 0 },
+    { "asset": "cadre-gauche", "x": 3, "y": 0 },
+    { "asset": "cadre-droit", "x": 6, "y": 0 },
+    { "asset": "plante", "x": 1, "y": 2, "rythme": 0.6, "gueule": true }
+  ],
+  "themes": {
+    "nouvel-an": {
+      "mois": 1,
+      "objets": [
+        { "asset": "ballons", "x": 2.5, "y": 2, "rythme": 0.8 },
+        { "asset": "ballons", "x": 6.6, "y": 2, "rythme": 0.8 }
+      ],
+      "terrain": [
+        { "asset": "feu-artifice", "x": 4, "y": 0, "rythme": 0.3 },
+        { "asset": "ballons", "x": 0, "y": 3, "rythme": 0.8 }
+      ]
+    },
+    "saint-valentin": {
+      "mois": 2,
+      "objets": [
+        { "asset": "bouquet", "x": 2.5, "y": 2 },
+        { "asset": "bouquet", "x": 6.6, "y": 2 }
+      ],
+      "terrain": [
+        { "asset": "ballon-coeur", "x": 4, "y": 1, "rythme": 0.8 },
+        { "asset": "ballon-coeur", "x": 0, "y": 3, "rythme": 0.8 }
+      ]
+    },
+    "saint-patrick": {
+      "mois": 3,
+      "objets": [
+        { "asset": "pot-or", "x": 2.5, "y": 2, "rythme": 0.5 },
+        { "asset": "pot-or", "x": 6.6, "y": 2, "rythme": 0.5 }
+      ],
+      "terrain": [
+        { "asset": "pot-or", "x": 3, "y": 3, "rythme": 0.5 },
+        { "asset": "trefles", "x": 0, "y": 3 },
+        { "asset": "trefles", "x": 4, "y": 1 }
+      ]
+    },
+    "paques": {
+      "mois": 4,
+      "objets": [
+        { "asset": "panier", "x": 2.5, "y": 2 },
+        { "asset": "panier", "x": 6.6, "y": 2 }
+      ],
+      "terrain": [
+        { "asset": "oeufs", "x": 0, "y": 3 },
+        { "asset": "oeufs", "x": 4, "y": 1 },
+        { "asset": "tulipes", "x": 3, "y": 3 }
+      ]
+    },
+    "fete-nationale": {
+      "mois": 6,
+      "objets": [
+        { "asset": "drapeau", "x": 2.5, "y": 2, "rythme": 0.5 },
+        { "asset": "drapeau", "x": 6.6, "y": 2, "rythme": 0.5 }
+      ],
+      "terrain": [
+        { "asset": "feu-de-joie", "x": 3, "y": 3, "rythme": 0.2 },
+        { "asset": "drapeau", "x": 4, "y": 1, "rythme": 0.5 }
+      ]
+    },
+    "fete-du-canada": {
+      "mois": 7,
+      "objets": [
+        { "asset": "gateau", "x": 2.5, "y": 2 },
+        { "asset": "drapeau", "x": 6.6, "y": 2, "rythme": 0.5 }
+      ],
+      "terrain": [
+        { "asset": "feu-artifice", "x": 4, "y": 0, "rythme": 0.3 },
+        { "asset": "drapeau", "x": 0, "y": 3, "rythme": 0.5 }
+      ]
+    },
+    "noel": {
+      "mois": 12,
+      "tailles": { "plante": [16, 24] },
+      "objets": [
+        { "asset": "cadeau", "x": 2.5, "y": 2 },
+        { "asset": "cadeau", "x": 6.6, "y": 2 }
+      ],
+      "terrain": [
+        { "asset": "sapin-noel", "x": 4, "y": 1, "rythme": 0.8 },
+        { "asset": "cadeau", "x": 3, "y": 3 }
+      ]
+    },
+    "halloween": {
+      "mois": 10,
+      "tailles": { "plante": [24, 24] },
+      "objets": [
+        { "asset": "citrouille", "x": 2.5, "y": 2, "rythme": 0.4 },
+        { "asset": "citrouille", "x": 6.6, "y": 2, "rythme": 0.4 }
+      ],
+      "terrain": [
+        { "asset": "tombe", "x": 0, "y": 3 },
+        { "asset": "tombe", "x": 4, "y": 1 },
+        { "asset": "citrouille", "x": 3, "y": 3, "rythme": 0.4 }
+      ]
+    }
+  },
+  "personnages": {
+    "claude": "gestionnaire",
+    "redacteur": "employe",
+    "relecteur": "auditeur",
+    "relecteur-forme": "auditeur",
+    "relecteur-fond": "auditeur",
+    "relecteur-logique": "auditeur",
+    "Explore": "explorateur",
+    "chercheur": "explorateur",
+    "*": "generique"
+  },
+  "noms": {
+    "Explore": "explorateur",
+    "general-purpose": "généraliste",
+    "Plan": "planificateur",
+    "claude-code-guide": "guide",
+    "redacteur": "rédacteur"
+  },
+  "activites": {
+    "redacteur": "redaction",
+    "relecteur": "audit",
+    "relecteur-forme": "audit",
+    "relecteur-fond": "audit",
+    "relecteur-logique": "audit",
+    "*": "travail"
+  },
+  "ville": { "maisonsParRangee": 4 },
+  "tailles": {
+    "personnage": [16, 16],
+    "maison": [48, 48],
+    "herbe": [16, 16],
+    "route": [16, 16],
+    "arbre": [16, 16],
+    "sol": [16, 16],
+    "mur": [16, 16],
+    "mur-bas": [16, 16],
+    "porte": [32, 16],
+    "fenetre": [32, 16],
+    "cadre": [16, 16],
+    "coin": [16, 16],
+    "pancarte": [16, 24],
+    "plante": [16, 16],
+    "carnivore": [24, 24],
+    "poste": [32, 20],
+    "bureau-gestionnaire": [48, 24],
+    "cigare": [16, 16],
+    "chaise": [16, 12],
+    "fauteuil": [20, 12],
+    "photocopieuse": [16, 24],
+    "citrouille": [16, 16],
+    "tombe": [16, 16],
+    "sapin-noel": [16, 24],
+    "cadeau": [16, 16],
+    "ballons": [16, 24],
+    "feu-artifice": [16, 16],
+    "bouquet": [16, 16],
+    "ballon-coeur": [16, 24],
+    "trefles": [16, 16],
+    "pot-or": [16, 16],
+    "panier": [16, 16],
+    "oeufs": [16, 16],
+    "tulipes": [16, 16],
+    "drapeau": [16, 24],
+    "feu-de-joie": [16, 16],
+    "gateau": [16, 16]
+  }
+}

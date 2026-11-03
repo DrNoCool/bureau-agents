@@ -1,0 +1,14 @@
+# La documentation de travail : elle reste sur l'ordinateur, hors du dépôt public
+setup_felix/
+
+# Écrit par installer.ps1 : le chemin du bureau sur cette machine
+mod/projet.json
+
+# Produits à l'usage par le bureau
+vue/sessions/*
+!vue/sessions/.gitkeep
+vue/registre.js
+vue/eveil.js
+
+__pycache__/
+desktop.ini
