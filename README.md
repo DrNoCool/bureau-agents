@@ -4,9 +4,13 @@
 
 A Claude Code mod that shows your session's agents at work, in a pixel-art town and offices. Each open session is a house. The main agent sits at the manager's desk; each subagent walks in through the door, works at its desk, then leaves.
 
-![The office: the manager at the top, subagents at their desks](apercu.png)
+![The office during a session: the manager at the top, subagents at their desks, a reviewer walking over to the writer](captures/bureau.png)
 
 > **Heads-up: the interface is in French.** The mod works the same for everyone, but the labels and messages on the page are in French.
+
+The office dresses up for the holidays, on its own, according to the month:
+
+![The eight holiday themes: New Year, Valentine's Day, St. Patrick's Day, Easter, Quebec's Fête nationale, Canada Day, Halloween, Christmas](captures/themes.png)
 
 ## Install (Windows)
 
@@ -30,6 +34,7 @@ The script first backs up `~/.claude/settings.json`, then adds the mod to it wit
 | `vue/` | The page: the town, the offices, the side panel |
 | `personnages/`, `decor/`, `themes/` | The drawings, including a theme for each holiday of the year |
 | `outils/` | Drawing scripts, image conversion (`construire.py`), a fake session (`demo.py`) and a keep-awake script (`rester_eveille.ps1`) that the mod runs while Claude is working |
+| `captures/` | The screenshots on this page |
 | `bureau.json` | The floor plan: desks, characters per agent type, themes |
 
 ## License

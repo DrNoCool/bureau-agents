@@ -4,6 +4,12 @@
 
 Un mod de Claude Code qui montre les agents de la session au travail, dans une ville et des bureaux en pixel art. Chaque session ouverte est une maison ; chaque sous-agent entre par la porte, travaille à son poste, puis ressort.
 
+![Le bureau pendant une session : le gestionnaire en haut, les sous-agents à leur poste, un auditeur qui va voir le rédacteur](captures/bureau.png)
+
+Le bureau se déguise tout seul pour les fêtes, selon le mois :
+
+![Les huit thèmes : Nouvel An, Saint-Valentin, Saint-Patrick, Pâques, Fête nationale, Fête du Canada, Halloween, Noël](captures/themes.png)
+
 ## Installer (Windows)
 
 1. Cloner ce dépôt où on veut.
@@ -26,6 +32,7 @@ Le script sauvegarde d'abord `~/.claude/settings.json`, puis y ajoute le branche
 | `vue/` | La page : la ville, les bureaux, le panneau de droite |
 | `personnages/`, `decor/`, `themes/` | Les dessins, dont un thème par fête du calendrier |
 | `outils/` | Les scripts de dessin, la conversion des images (`construire.py`), une fausse session (`demo.py`) et l'anti-veille (`rester_eveille.ps1`), que le mod lance quand Claude travaille |
+| `captures/` | Les captures de cette page |
 | `bureau.json` | Le plan : les bureaux, les personnages par type d'agent, les thèmes |
 
 ## Licence
