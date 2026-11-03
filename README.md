@@ -6,6 +6,10 @@ A Claude Code mod that shows your session's agents at work, in a pixel-art town 
 
 ![The office during a session: the manager at the top, subagents at their desks, a reviewer walking over to the writer](captures/bureau.png)
 
+The **Étapes** button swaps the office for the step list Claude keeps up to date during the session. The log on the right recaps who came and how it ended:
+
+![The step list on the left, the log on the right, once every agent has left](captures/etapes.png)
+
 > **Heads-up: the interface is in French.** The mod works the same for everyone, but the labels and messages on the page are in French.
 
 The office dresses up for the holidays, on its own, according to the month:

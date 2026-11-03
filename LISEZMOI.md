@@ -6,6 +6,10 @@ Un mod de Claude Code qui montre les agents de la session au travail, dans une v
 
 ![Le bureau pendant une session : le gestionnaire en haut, les sous-agents à leur poste, un auditeur qui va voir le rédacteur](captures/bureau.png)
 
+Le bouton **Étapes** remplace le bureau par la liste d'étapes que Claude tient à jour pendant la séance. Le journal, à droite, résume qui est venu et comment ça s'est fini :
+
+![La liste d'étapes à gauche, le journal à droite, une fois tous les agents repartis](captures/etapes.png)
+
 Le bureau se déguise tout seul pour les fêtes, selon le mois :
 
 ![Les huit thèmes : Nouvel An, Saint-Valentin, Saint-Patrick, Pâques, Fête nationale, Fête du Canada, Halloween, Noël](captures/themes.png)
