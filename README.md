@@ -4,6 +4,10 @@
 
 A Claude Code mod that shows your session's agents at work, in a pixel-art town and offices. Each open session is a house. The main agent sits at the manager's desk; each subagent walks in through the door, works at its desk, then leaves.
 
+![The town: one house per open session, with lit windows when Claude is working and a raised hand when it needs your permission](captures/ville.png)
+
+Click a house to step into its office:
+
 ![The office during a session: the manager at the top, subagents at their desks, a reviewer walking over to the writer](captures/bureau.png)
 
 The **Étapes** button swaps the office for the step list Claude keeps up to date during the session. The log on the right recaps who came and how it ended:

@@ -4,6 +4,10 @@
 
 Un mod de Claude Code qui montre les agents de la session au travail, dans une ville et des bureaux en pixel art. Chaque session ouverte est une maison ; chaque sous-agent entre par la porte, travaille à son poste, puis ressort.
 
+![La ville : une maison par session ouverte, les fenêtres allumées quand Claude travaille, une main levée quand il attend ta permission](captures/ville.png)
+
+Clique sur une maison pour entrer dans son bureau :
+
 ![Le bureau pendant une session : le gestionnaire en haut, les sous-agents à leur poste, un auditeur qui va voir le rédacteur](captures/bureau.png)
 
 Le bouton **Étapes** remplace le bureau par la liste d'étapes que Claude tient à jour pendant la séance. Le journal, à droite, résume qui est venu et comment ça s'est fini :

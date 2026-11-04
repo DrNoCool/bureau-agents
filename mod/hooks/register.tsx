@@ -264,8 +264,9 @@ function devinerNotebook(texte: string): string | undefined {
 const LIRE = ['Read', 'Grep', 'Glob', 'WebFetch', 'WebSearch', 'ToolSearch']
 const ECRIRE = ['Edit', 'Write', 'NotebookEdit']
 const COMMANDE = ['Bash', 'PowerShell']
-// Les commandes d'essai d'un rédacteur : tests automatiques ou vérification de l'app.
-const ESSAI = /\b(npm|pnpm|yarn)\s+(run\s+)?test\b|\bpytest\b|\bnode\s+--check\b|\bpython\s+-m\s+unittest\b|\bvitest\b|\bjest\b/
+// Les commandes d'essai d'un rédacteur : tests automatiques, vérification de
+// l'app, ou scripts de contrôle (ils terminent avec le code 1 s'il y a des écarts).
+const ESSAI = /\b(npm|pnpm|yarn)\s+(run\s+)?test\b|\bpytest\b|\bnode\s+--check\b|\bpython\s+-m\s+unittest\b|\bvitest\b|\bjest\b|\bcontrole_(gabarit|pipeline)\b/
 
 function decrire(e: { tool: string }): { texte: string; glyph: string } {
   const a = e as unknown as Record<string, unknown>
@@ -286,10 +287,13 @@ function decrire(e: { tool: string }): { texte: string; glyph: string } {
 }
 
 const NOMS: Record<string, string> = { five_hour: '5h', seven_day: '7j' }
+// La longueur de chaque fenêtre, en minutes.
+const DUREES: Record<string, number> = { five_hour: 300, seven_day: 10080 }
 
-// « 5h 80 % 1h15m  ·  7j 11 % 3j » : la page en tire une jauge par fenêtre,
-// avec le temps qui reste avant que chacune reparte. Avant la première mesure :
-// « 5h ?  ·  7j ? ».
+// « 5h 80 % 1h15m /75  ·  7j 11 % 3j /57 » : la page en tire une jauge par
+// fenêtre, avec le temps qui reste avant que chacune reparte. Le nombre après
+// la barre est la part de la fenêtre déjà passée, en % : la couleur de la jauge
+// compare l'utilisation à ce rythme. Avant la première mesure : « 5h ?  ·  7j ? ».
 // Dès 24 h, des jours et des heures (« 1j12h ») ; en deçà, des heures (« 23h »),
 // avec leurs minutes sous 10 h (« 1h15m », « 56m »). Une seconde unité à zéro
 // tombe (« 1j », « 1h »). La jauge tient alors dans sa colonne.
@@ -307,7 +311,9 @@ function ligneLimites(liste: Limit[], maintenant: number): string {
       const base = `${NOMS[l.kind] ?? l.kind} ${l.percentUsed} %`
       if (!l.resetsAt) return base
       const min = Math.max(0, Math.round((new Date(l.resetsAt).getTime() - maintenant) / 60000))
-      return `${base} ${tempsRestant(min)}`
+      const duree = DUREES[l.kind]
+      const passe = duree ? ` /${Math.max(0, Math.round((1 - min / duree) * 100))}` : ''
+      return `${base} ${tempsRestant(min)}${passe}`
     })
     .join('  ·  ')
 }

@@ -1223,16 +1223,25 @@ function duree(ms) {
   return `${Math.floor(s / 3600)}h${String(Math.floor(s / 60) % 60).padStart(2, '0')}`
 }
 
-// Une jauge sans barre : « 5h 92% 56m », le pourcentage en couleur — vert,
-// ambre passé 70 %, rouge passé 90 %. Les espaces autour du point sont
-// resserrées (word-spacing de .jauge) : la jauge tient dans sa colonne.
+const VERT = '#8fcf8f'
+const ROUGE = '#e0604f'
+// Le contexte : ambre dès 25 %, rouge dès 50 %.
+const couleurContexte = pourcent => pourcent >= 50 ? ROUGE : pourcent >= 25 ? AMBRE : VERT
+// Une limite suit son rythme : vert sous 20 % utilisés, ou tant que l'utilisation
+// ne dépasse pas le temps passé. En avance sur le temps : ambre jusqu'à 80 %,
+// rouge au-delà. Sans temps passé connu, seuls les seuils comptent.
+const couleurLimite = (utilise, passe = 0) => utilise < 20 || utilise <= passe ? VERT : utilise > 80 ? ROUGE : AMBRE
+
+// Une jauge sans barre : « 5h 92% 56m », le pourcentage dans la couleur donnée.
+// Les espaces autour du point sont resserrées (word-spacing de .jauge) : la
+// jauge tient dans sa colonne.
 const SEP = ' · '
-function jauge(nom, pourcent, valeur) {
+function jauge(nom, couleur, valeur) {
   const d = document.createElement('span')
   d.className = 'jauge'
   const v = document.createElement('span')
   v.textContent = valeur
-  v.style.color = pourcent >= 90 ? '#e0604f' : pourcent >= 70 ? '#f2b33d' : '#8fcf8f'
+  v.style.color = couleur
   if (nom) d.append(nom, SEP)
   d.append(v)
   return d
@@ -1252,7 +1261,7 @@ function carteGestionnaire(c, activite) {
     rangs: [[
       nomModele(c.modele) ?? '?',
       c.effort ? { effort: c.effort } : '?',
-      ctx?.percent !== undefined ? { jauge: ['', ctx.percent, valeur] } : '',
+      ctx?.percent !== undefined ? { jauge: ['', couleurContexte(ctx.percent), valeur] } : '',
       enK(c.out ?? 0),
       reste === null ? '?' : c.isWorking && !(c.attente > 0) ? '↻' : reste <= 0 ? '✗' : duree(reste),
     ]],
@@ -1449,16 +1458,16 @@ function ecrireInfos() {
   }))
   const div = document.getElementById('limites')
   div.replaceChildren(...limites.map(texte => {
-    // « 5h 80 % 1h15 » devient une jauge ; le reste s'écrit tel quel.
-    const m = texte.match(/^(\S+) (\d+) %(?: (\S+))?$/)
-    if (m) return jauge(m[1], Number(m[2]), `${m[2]}%${m[3] ? `${SEP}${m[3]}` : ''}`)  // « 5h · 92% · 56m »
+    // « 5h 80 % 1h15m /40 » devient une jauge ; le reste s'écrit tel quel. Le
+    // « /40 » (la part de temps passé) ne s'affiche pas : il choisit la couleur.
+    const m = texte.match(/^(\S+) (\d+) %(?: ([^\s/]+))?(?: \/(\d+))?$/)
+    if (m) {
+      const passe = m[4] === undefined ? undefined : Number(m[4])
+      return jauge(m[1], couleurLimite(Number(m[2]), passe), `${m[2]}%${m[3] ? `${SEP}${m[3]}` : ''}`)  // « 5h · 92% · 56m »
+    }
     // Avant la première mesure, « 5h ? » : le même séparateur, sans couleur.
     const inconnu = texte.match(/^(\S+) \?$/)
-    if (inconnu) {
-      const d = jauge(inconnu[1], 0, '?')
-      d.lastChild.style.color = ''
-      return d
-    }
+    if (inconnu) return jauge(inconnu[1], '', '?')
     const d = document.createElement('div')
     d.textContent = texte
     return d

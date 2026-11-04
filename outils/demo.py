@@ -20,11 +20,11 @@ TOURS = int(sys.argv[1]) if len(sys.argv) > 1 else 3
 # Le scénario d'un tour : (seconde d'arrivée, seconde de départ, type,
 # personnage, notebook, et ce qu'il fait au fil du temps).
 AGENTS = [
-    (3, 42, "redacteur", "employe", "NBK_CreationInitTables", [("Read", "?"), ("Edit", "$"), ("Bash", ">")]),
-    (7, 24, "Explore", "explorateur", None, [("Glob", "?"), ("Grep", "?")]),
-    (17, 26, "relecteur", "auditeur", "NBK_CreationInitTables", [("Read", "?"), ("Grep", "?")]),
-    (30, 37, "relecteur", "auditeur", "NBK_CreationInitTables", [("Read", "?")]),
-    (3, 34, "general-purpose", "generique", None, [("Read", "?"), ("Bash", ">")]),
+    (3, 42, "redacteur", "employe", "NBK_RecensementDesChaussettes", [("Read", "?"), ("Edit", "$"), ("Bash", ">")]),
+    (7, 24, "Explore", "explorateur", "NBK_MeteoDuFrigo", [("Glob", "?"), ("Grep", "?")]),
+    (17, 26, "relecteur", "auditeur", "NBK_RecensementDesChaussettes", [("Read", "?"), ("Grep", "?")]),
+    (30, 37, "relecteur", "auditeur", "NBK_RecensementDesChaussettes", [("Read", "?")]),
+    (3, 34, "general-purpose", "generique", "NBK_BudgetDesPigeons", [("Read", "?"), ("Bash", ">")]),
 ]
 # Le générique entre en même temps que le rédacteur : ils font la file à la
 # porte. Les deux auditeurs sont appelés par le premier rédacteur : ils
