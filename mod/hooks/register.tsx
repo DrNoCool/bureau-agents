@@ -25,6 +25,20 @@ const NOM_OUTIL_ETAPES = 'mcp__bureau-agents__etapes'
 const ETATS: Etape['etat'][] = ['fait', 'en_cours', 'a_faire']
 const cleEtapes = () => `etapes:${racine ?? projet}`
 
+// Ce qui garde la liste à jour sans que la personne ait à le demander : une
+// consigne dans le prompt système, et un rappel en fin de tour. Le rappel ne
+// vient que si le tour a changé quelque chose (fichier modifié, agent lancé,
+// commit) sans passer par l'outil, et qu'il reste des étapes ouvertes.
+const CONSIGNE_ETAPES =
+  "Liste d'étapes du bureau : dès qu'un travail compte plusieurs étapes, crée la liste avec l'outil etapes avant de commencer. " +
+  "Tiens-la à jour au fil du travail : en_cours quand tu entames une étape, fait dès qu'elle est finie, et ajoute ou retire les étapes qui changent. " +
+  "Ne l'utilise pas pour un petit changement ou une simple question."
+const RAPPEL_ETAPES =
+  "Tu as travaillé pendant ce tour, mais la liste d'étapes n'a pas bougé et il lui reste des étapes ouvertes. " +
+  "Si elle n'est plus juste, mets-la à jour avec l'outil etapes (liste complète). Si elle l'est, ou si ce tour n'y touchait pas, laisse-la. " +
+  'Dans les deux cas, ne reprends pas ta réponse : conclus en une ligne.'
+let aTravaille = false
+
 function lireEtapes(brut: unknown): Etapes | string {
   const e = brut as { titre?: unknown; etapes?: unknown; notes?: unknown }
   if (!Array.isArray(e?.etapes)) return 'etapes doit être une liste'
@@ -338,6 +352,16 @@ function conclure(texte: string): Agent['conclusion'] {
 // agent relancé (SendMessage) revient sans nouveau lancement.
 const connus = new Map<string, Agent>()
 
+// Met un agent dans la liste, à un poste libre. Une seule ligne par agent : la
+// page ne dessine qu'un avatar par identifiant, mais son panneau lit la liste
+// ligne par ligne, et y montrerait un doublon.
+function placer(liste: Agent[], fiche: Agent): Agent[] {
+  const autres = liste.filter(a => a.id !== fiche.id)
+  const pris = new Set(autres.filter(a => a.leftAt === undefined).map(a => a.desk))
+  const libre = Array.from({ length: plan?.postes.length ?? 0 }, (_, i) => i).find(i => !pris.has(i))
+  return [...autres, { ...fiche, desk: libre ?? -1 }]
+}
+
 // Un agent qui reprend après être parti revient dans la liste, à un poste
 // libre, comme un nouveau venu. Rend vrai s'il est revenu.
 async function revenir($: Moteur, id: string): Promise<boolean> {
@@ -346,13 +370,7 @@ async function revenir($: Moteur, id: string): Promise<boolean> {
   const liste = await read($, agents)
   if (liste.some(a => a.id === id && a.leftAt === undefined)) return false
   const maintenant = await $.clock.now()
-  const postes = plan?.postes.length ?? 0
-  await update($, agents, l => {
-    const autres = l.filter(a => a.id !== id)
-    const pris = new Set(autres.filter(a => a.leftAt === undefined).map(a => a.desk))
-    const libre = Array.from({ length: postes }, (_, i) => i).find(i => !pris.has(i))
-    return [...autres, { ...fiche, desk: libre ?? -1, enteredAt: maintenant }]
-  })
+  await update($, agents, l => placer(l, { ...fiche, enteredAt: maintenant }))
   return true
 }
 
@@ -567,8 +585,9 @@ export const register: Register = on => {
     const id = 'agentId' in r ? r.agentId : undefined
     if (id) {
       const maintenant = await $.clock.now()
-      const postes = plan?.postes.length ?? 0
-      const fiche: Agent = {
+      // Une reprise (SendMessage) repasse ici, avec le même identifiant, et son
+      // événement ne redit pas forcément le type : la fiche connue reste la bonne.
+      const fiche: Agent = connus.get(id) ?? {
         id,
         type: e.subagentType,
         description: e.description,
@@ -578,12 +597,12 @@ export const register: Register = on => {
         parent: e.parentAgentId,
       }
       connus.set(id, fiche)
-      await noter($, `→ ${nomDe(e.subagentType)} · ${e.description}`)
-      await update($, agents, liste => {
-        const pris = new Set(liste.filter(a => a.leftAt === undefined).map(a => a.desk))
-        const libre = Array.from({ length: postes }, (_, i) => i).find(i => !pris.has(i))
-        return [...liste, { ...fiche, desk: libre ?? -1 }]
-      })
+      await noter($, `→ ${nomDe(fiche.type)} · ${e.description || fiche.description}`)
+      // L'agent tourne déjà : sa première action a pu le remettre dans la liste
+      // (revenir). Il garde alors sa place.
+      await update($, agents, liste =>
+        liste.some(a => a.id === id && a.leftAt === undefined) ? liste : placer(liste, { ...fiche, enteredAt: maintenant }),
+      )
       await publier($)
     }
 
@@ -592,6 +611,7 @@ export const register: Register = on => {
 
   on('turn.start', async ($, e, next) => {
     if (e.agentId === undefined) {
+      aTravaille = false
       await update($, main, m => ({ ...m, isWorking: true }))
       await publier($)
     } else if (await revenir($, e.agentId)) {
@@ -626,6 +646,9 @@ export const register: Register = on => {
   on('tool.call', async ($, e, next) => {
     const { texte, glyph } = decrire(e)
     const isPrincipal = e.agentId === undefined
+    const commande = (e as unknown as { command?: unknown }).command
+    const isCommit = isPrincipal && COMMANDE.includes(e.tool) && typeof commande === 'string' && /\bgit\b[^|;&]*\b(commit|push)\b/.test(commande)
+    if (ECRIRE.includes(e.tool) || isCommit || (isPrincipal && e.tool === 'Agent')) aTravaille = true
     // Le journal : les fichiers modifiés et les erreurs d'outil, une fois l'outil fini.
     const journaliser = async <R extends { isError?: boolean }>(r: R): Promise<R> => {
       await lever($, e.agentId)
@@ -646,7 +669,6 @@ export const register: Register = on => {
 
     // L'essai du rédacteur (tests, vérification de l'app) : la page envoie
     // l'employé à la photocopieuse, et le verdict allume le voyant vert ou rouge.
-    const commande = (e as unknown as { command?: unknown }).command
     if (!isPrincipal && COMMANDE.includes(e.tool) && typeof commande === 'string' && ESSAI.test(commande)) {
       await update($, agents, liste =>
         liste.map(a => (a.id === e.agentId ? { ...a, controles: (a.controles ?? 0) + 1 } : a)),
@@ -663,9 +685,9 @@ export const register: Register = on => {
     }
     // Un commit ou un push du gestionnaire : git est relu une fois la commande
     // terminée (next rend la main après), donc le commit est déjà écrit.
-    if (isPrincipal && COMMANDE.includes(e.tool) && typeof commande === 'string' && /\bgit\b[^|;&]*\b(commit|push)\b/.test(commande)) {
+    if (isCommit) {
       const r = await next(e)
-      if (!r.isError) await noter($, /\bpush\b/.test(commande) ? '● push' : '● commit')
+      if (!r.isError) await noter($, /\bpush\b/.test(String(commande)) ? '● push' : '● commit')
       await relever($)
 
       return journaliser(r)
@@ -697,6 +719,7 @@ export const register: Register = on => {
   on('tool.call', { tool: NOM_OUTIL_ETAPES }, async ($, e) => {
     const lu = lireEtapes(e)
     if (typeof lu === 'string') return { deny: lu }
+    aTravaille = false
     const liste = { ...lu, maj: await $.clock.now() }
     await update($, etapes, () => liste)
     await $.store.set(cleEtapes(), liste)
@@ -704,6 +727,24 @@ export const register: Register = on => {
     const reste = liste.etapes.filter(x => x.etat !== 'fait').length
 
     return { result: `Liste affichée : ${liste.etapes.length} étapes, ${reste} à faire ou en cours.` }
+  })
+
+  // La consigne, là où l'outil est offert. Un texte fixe : il ne brise pas le cache.
+  on('prompt.compose', async ($, e, next) => {
+    const r = await next(e)
+    if (!e.tools.includes(NOM_OUTIL_ETAPES)) return r
+
+    return { sections: [...r.sections, { id: 'bureau-agents:etapes', text: CONSIGNE_ETAPES, scope: 'session' }] }
+  })
+
+  // Claude veut finir son tour. Une seule relance : stop_hook_active dit que
+  // cette fin vient déjà d'une relance, et Claude rend alors la main pour de bon.
+  on('classic.Stop', async ($, e, next) => {
+    const isRappel = aTravaille && !e.stop_hook_active && (await read($, etapes)).etapes.some(x => x.etat !== 'fait')
+    aTravaille = false
+    const r = await next(e)
+
+    return isRappel ? { block: RAPPEL_ETAPES, ...r } : r
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
