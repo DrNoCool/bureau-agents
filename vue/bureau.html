@@ -1225,8 +1225,8 @@ function duree(ms) {
 
 const VERT = '#8fcf8f'
 const ROUGE = '#e0604f'
-// Le contexte : ambre dès 25 %, rouge dès 50 %.
-const couleurContexte = pourcent => pourcent >= 50 ? ROUGE : pourcent >= 25 ? AMBRE : VERT
+// Le contexte : ambre dès 15 %, rouge dès 25 %.
+const couleurContexte = pourcent => pourcent >= 25 ? ROUGE : pourcent >= 15 ? AMBRE : VERT
 // Une limite suit son rythme : vert sous 20 % utilisés, ou tant que l'utilisation
 // ne dépasse pas le temps passé. En avance sur le temps : ambre jusqu'à 80 %,
 // rouge au-delà. Sans temps passé connu, seuls les seuils comptent.

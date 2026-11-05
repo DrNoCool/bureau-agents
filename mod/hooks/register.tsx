@@ -66,6 +66,7 @@ type Plan = {
 type Moteur = Parameters<typeof read>[0] & {
   fs: { read: (chemin: string) => Promise<string>; write: (chemin: string, texte: string) => Promise<void> }
   plugin: { root: string }
+  session: { id: () => Promise<string> }
   clock: { now: () => Promise<number>; after: (ms: number, fn: () => void) => { cancel: () => void } }
   process: {
     run: (argv: readonly string[], init?: { cwd?: string; timeoutMs?: number }) => Promise<{ exitCode: number; stdout: string }>
@@ -79,6 +80,10 @@ type Registre = Record<string, { projet: string; battement: number }>
 // mod/projet.json : écrire dans le dossier du mod le ferait se recharger.
 let dossier: string | undefined
 let sessionId: string | undefined
+// Après un /clear ou une reprise, le programme continue sous un autre
+// identifiant, sans nouveau session.start. On retient celui qui vient de finir,
+// jusqu'à ce que $.session.id() en donne un autre.
+let idFini: string | undefined
 let projet = '?'
 let plan: Plan | undefined
 let probleme: string | undefined
@@ -247,6 +252,26 @@ async function inscrire($: Moteur, isPresente: boolean): Promise<void> {
     await $.fs.write(chemin, `window.BUREAU_REGISTRE = ${JSON.stringify(registre)};\n`)
   } catch {
     // La page retrouvera la session au prochain battement.
+  }
+}
+
+// Une nouvelle conversation dans le même programme : une maison neuve, sans
+// les agents ni le journal de l'ancienne. La liste d'étapes reste : elle est
+// gardée par projet, pas par conversation.
+async function reprendre($: Moteur): Promise<void> {
+  if (!idFini) return
+  try {
+    const id = await $.session.id()
+    if (id === idFini) return
+    idFini = undefined
+    sessionId = id
+    await update($, agents, () => [])
+    await update($, journal, () => [])
+    await update($, main, () => ({ isWorking: false }))
+    await inscrire($, true)
+    await publier($)
+  } catch {
+    // Le prochain battement réessaiera.
   }
 }
 
@@ -458,6 +483,7 @@ export const register: Register = on => {
     await inscrire($, true)
     battement?.cancel()
     battement = $.clock.every(10000, () => {
+      void reprendre($)
       lancerServeur()
       void inscrire($, true)
       void publier($)
@@ -515,11 +541,19 @@ export const register: Register = on => {
   })
 
   // La maison disparaît de la ville tout de suite, sans attendre que son
-  // battement s'éteigne.
+  // battement s'éteigne. Après un /clear ou une reprise, le programme continue :
+  // le battement reste, et reprendre() ouvre la maison de la nouvelle conversation.
   on('session.end', async ($, e, next) => {
-    battement?.cancel()
-    prochainReleve?.cancel()
+    const isContinue = e.reason === 'clear' || e.reason === 'resume'
+    if (!isContinue) {
+      battement?.cancel()
+      prochainReleve?.cancel()
+    }
     await Promise.all([publier($, true), inscrire($, false)])
+    if (isContinue) {
+      idFini = e.sessionId
+      sessionId = undefined
+    }
 
     return next(e)
   })
@@ -617,6 +651,7 @@ export const register: Register = on => {
 
   on('turn.start', async ($, e, next) => {
     if (e.agentId === undefined) {
+      await reprendre($)
       aTravaille = false
       await update($, main, m => ({ ...m, isWorking: true }))
       await publier($)
