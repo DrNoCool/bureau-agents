@@ -106,7 +106,7 @@ recolorer(THEME, "cadre", MURS, [(4, 4, [
     "cccccccc",
 ], {**PORTRAIT, ".": "#efe6d2"})])
 
-# La grande moustache de novembre : au-dessus de la porte des maisons, et aux coins du mur.
+# La grande moustache de novembre, aux coins du mur.
 MOUSTACHE = [
     "..MM........MM..",
     ".M..M......M..M.",
@@ -118,8 +118,8 @@ MOUSTACHE = [
 ]
 NOIR = {"M": "#1c1c1c"}
 
-# La ville : les fenêtres font des yeux, la porte une bouche, et chaque maison a sa moustache.
-recolorer(THEME, "maison", {MAISON["R"]: "#4a5a70", MAISON["r"]: "#364456"}, [(16, 25, MOUSTACHE, NOIR)])
+# La ville : un toit d'ardoise.
+recolorer(THEME, "maison", {MAISON["R"]: "#4a5a70", MAISON["r"]: "#364456"})
 recolorer(THEME, "herbe", {HERBE["g"]: "#8a9a62", HERBE["G"]: "#6e7f4e"})
 recolorer(THEME, "route", {ROUTE["s"]: "#c4b490", ROUTE["S"]: "#a8987a"})
 recolorer(THEME, "arbre", {ARBRE["v"]: "#b8722e", ARBRE["V"]: "#8a4f1e"})
