@@ -101,6 +101,19 @@
         { "asset": "drapeau", "x": 0, "y": 3, "rythme": 0.5 }
       ]
     },
+    "movember": {
+      "mois": 11,
+      "tailles": { "plante": [16, 24] },
+      "objets": [
+        { "asset": "poteau-barbier", "x": 2.5, "y": 2, "rythme": 0.2 },
+        { "asset": "poteau-barbier", "x": 6.6, "y": 2, "rythme": 0.2 }
+      ],
+      "terrain": [
+        { "asset": "poteau-barbier", "x": 0, "y": 3, "rythme": 0.2 },
+        { "asset": "feuilles", "x": 3, "y": 3 },
+        { "asset": "feuilles", "x": 4, "y": 1 }
+      ]
+    },
     "noel": {
       "mois": 12,
       "tailles": { "plante": [16, 24] },
@@ -191,6 +204,8 @@
     "tulipes": [16, 16],
     "drapeau": [16, 24],
     "feu-de-joie": [16, 16],
-    "gateau": [16, 16]
+    "gateau": [16, 16],
+    "poteau-barbier": [16, 24],
+    "feuilles": [16, 16]
   }
 }
