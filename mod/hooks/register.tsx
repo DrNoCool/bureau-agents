@@ -98,8 +98,9 @@ async function charger($: Moteur): Promise<void> {
   }
 }
 
-// L'état git du dossier de la session, relu au démarrage et après chaque commit
-// ou push du gestionnaire. Rien n'est tiré du serveur (pas de fetch) : « à
+// L'état git du dossier de la session, relu au démarrage, à chaque fin de tour
+// du gestionnaire et après ses commandes git qui le changent : commit, push,
+// changement de branche, fusion… Rien n'est tiré du serveur (pas de fetch) : « à
 // tirer » date du dernier fetch ou pull.
 const RELEVE = 15 * 60000
 type Depot =
@@ -115,7 +116,7 @@ let prochainReleve: { cancel: () => void } | undefined
 // Claude fait les commits ; seul le push peut venir d'ailleurs (de toi, dans
 // VS Code). Tant qu'il reste des commits à pousser, un relevé 15 minutes
 // après le dernier, quelle qu'en soit la cause. Rien à pousser, ou pas un
-// dépôt git : plus de relevé jusqu'au prochain commit du gestionnaire.
+// dépôt git : plus de relevé minuté, seulement ceux de fin de tour.
 async function relever($: Moteur): Promise<void> {
   prochainReleve?.cancel()
   prochainReleve = undefined
@@ -258,8 +259,17 @@ async function inscrire($: Moteur, isPresente: boolean): Promise<void> {
 // Une nouvelle conversation dans le même programme : une maison neuve, sans
 // les agents ni le journal de l'ancienne. La liste d'étapes reste : elle est
 // gardée par projet, pas par conversation.
+// Le battement et le premier message peuvent arriver ensemble : ils partagent
+// alors la même reprise. Le message attend qu'elle finisse, sinon la remise à
+// zéro effacerait son « Claude travaille ».
+let reprise: Promise<void> | undefined
+
 async function reprendre($: Moteur): Promise<void> {
-  if (!idFini) return
+  if (idFini && !reprise) reprise = ouvrirMaison($).finally(() => { reprise = undefined })
+  await reprise
+}
+
+async function ouvrirMaison($: Moteur): Promise<void> {
   try {
     const id = await $.session.id()
     if (id === idFini) return
@@ -667,6 +677,8 @@ export const register: Register = on => {
     if (e.agentId === undefined) {
       // Le tour fini efface ce qu'il faisait, pas sa fiche (modèle, effort, contexte, cache).
       await update($, main, ({ modele, effort, reponse, contexte, req, cout, out }) => ({ isWorking: false, modele, effort, reponse, contexte, req, cout, out, permission: false }))
+      // Filet : ce qui a été fait à la main dans VS Code se voit au tour suivant.
+      await relever($)
     } else {
       // Sa conclusion décide s'il sacre, s'il a des remarques ou s'il coche en vert.
       const conclusion = conclure(r.text ?? '')
@@ -688,7 +700,9 @@ export const register: Register = on => {
     const { texte, glyph } = decrire(e)
     const isPrincipal = e.agentId === undefined
     const commande = (e as unknown as { command?: unknown }).command
-    const isCommit = isPrincipal && COMMANDE.includes(e.tool) && typeof commande === 'string' && /\bgit\b[^|;&]*\b(commit|push)\b/.test(commande)
+    const isShell = isPrincipal && COMMANDE.includes(e.tool) && typeof commande === 'string'
+    const isCommit = isShell && /\bgit\b[^|;&]*\b(commit|push)\b/.test(commande)
+    const isGit = isCommit || (isShell && /\bgit\b[^|;&]*\b(switch|checkout|merge|rebase|pull|fetch|reset|revert|cherry-pick|stash|restore)\b/.test(commande))
     if (ECRIRE.includes(e.tool) || isCommit || (isPrincipal && e.tool === 'Agent')) aTravaille = true
     // Le journal : les fichiers modifiés et les erreurs d'outil, une fois l'outil fini.
     const journaliser = async <R extends { isError?: boolean }>(r: R): Promise<R> => {
@@ -724,11 +738,11 @@ export const register: Register = on => {
 
       return journaliser(r)
     }
-    // Un commit ou un push du gestionnaire : git est relu une fois la commande
-    // terminée (next rend la main après), donc le commit est déjà écrit.
-    if (isCommit) {
+    // Une commande git du gestionnaire : git est relu une fois la commande
+    // terminée (next rend la main après), donc son effet est déjà écrit.
+    if (isGit) {
       const r = await next(e)
-      if (!r.isError) await noter($, /\bpush\b/.test(String(commande)) ? '● push' : '● commit')
+      if (isCommit && !r.isError) await noter($, /\bpush\b/.test(String(commande)) ? '● push' : '● commit')
       await relever($)
 
       return journaliser(r)

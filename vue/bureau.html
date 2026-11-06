@@ -63,10 +63,10 @@
   .jauge { white-space: nowrap; word-spacing: -.35em; }
   /* Les agents en colonnes : une ligne par agent, ses cellules séparées d'un
      trait, puis ce qu'il fait, sur toute la largeur. */
-  .tableau { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: center; }
+  .tableau { display: grid; grid-template-columns: repeat(var(--colonnes), minmax(0, 1fr)); align-items: center; }
   /* Toujours une seule ligne : ce qui dépasse sa colonne se coupe en « … » ;
      le texte entier s'affiche au survol. */
-  .tableau .cellule { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 10px; }
+  .tableau .cellule { display: block; min-height: 1.5em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 10px; }
   .tableau .cellule > * { vertical-align: middle; }
   .tableau .effort { margin-right: 6px; }
   .tableau .cellule.premiere { padding-left: 0; }
@@ -75,10 +75,10 @@
   .tableau .entete { font-size: 12px; color: #b89b72; border-bottom: 1px solid var(--filet); margin-bottom: 4px; }
   /* Les boîtes, comme le suivi des modifications d'un notebook : une bande à
      gauche réunit tous les sous-agents ; sous chaque rédacteur, une boîte plus
-     étroite, à sa propre bande, réunit ses relecteurs. Chaque boîte a ses cinq
+     étroite, à sa propre bande, réunit ses relecteurs. Chaque boîte a ses
      colonnes égales, à sa largeur : plus étroite, elle rétrécit toutes ses
      colonnes un peu, au lieu d'écraser la première. */
-  .tableau .groupe { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: center;
+  .tableau .groupe { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(var(--colonnes), minmax(0, 1fr)); align-items: center;
     border-left: 3px solid color-mix(in srgb, #f6d365 35%, transparent); padding-left: 10px; margin: 2px 0 4px; }
   .tableau .groupe.relecteurs { margin-left: 14px; font-size: .92em;
     border-left-color: color-mix(in srgb, #b89b72 55%, transparent); }
@@ -1139,14 +1139,14 @@ function barreEffort(effort) {
   return s
 }
 
-// Des agents en colonnes : chacun { rangs: [[cellule…]…], fait }, cinq
-// cellules par rangée au plus, séparées d'un trait. Une cellule est un texte,
+// Des lignes en colonnes : chacune { rangs: [[cellule…]…], fait }, une colonne
+// par en-tête, ses cellules séparées d'un trait. Une cellule est un texte,
 // { titre }, { effort } ou { jauge: [nom, %, valeur] } ; « fait » prend toute
 // la largeur.
-const COLONNES = 5
-function tableau(lignes, entetes = []) {
+function tableau(lignes, entetes) {
   const d = document.createElement('div')
   d.className = 'tableau'
+  d.style.setProperty('--colonnes', entetes.length)
   // La rangée des titres de colonnes, soulignée du filet de la section.
   entetes.forEach((x, i) => {
     const s = document.createElement('span')
@@ -1189,7 +1189,7 @@ function rendreLignes(d, lignes) {
       d.appendChild(nom)
     }
     for (const rang of l.rangs) {
-      for (let i = 0; i < COLONNES; i++) {
+      for (let i = 0; i < rang.length; i++) {
         const x = rang[i]
         let s
         if (x?.effort) s = barreEffort(x.effort)
@@ -1206,6 +1206,7 @@ function rendreLignes(d, lignes) {
         d.appendChild(s)
       }
     }
+    if (l.fait === undefined) continue
     const f = document.createElement('div')
     f.className = ['fait', l.attend ? 'attend' : '', l.classe].filter(Boolean).join(' ')
     f.textContent = l.fait ?? ''
@@ -1261,7 +1262,7 @@ function carteGestionnaire(c, activite) {
     rangs: [[
       nomModele(c.modele) ?? '?',
       c.effort ? { effort: c.effort } : '?',
-      ctx?.percent !== undefined ? { jauge: ['', couleurContexte(ctx.percent), valeur] } : '',
+      ctx?.percent !== undefined ? { jauge: ['', couleurContexte(ctx.percent), valeur] } : '?',
       enK(c.out ?? 0),
       reste === null ? '?' : c.isWorking && !(c.attente > 0) ? '↻' : reste <= 0 ? '✗' : duree(reste),
     ]],
@@ -1308,14 +1309,22 @@ function antiVeille() {
 // L'état git du dossier de la session, lu par le mod (sans fetch : « à tirer »
 // date du dernier fetch ou pull).
 function ficheDepot(d) {
-  if (!d) return ['Lecture en cours…']
-  if (!d.isGit) return ['Pas un dépôt git']
+  if (!d) return [{ titre: 'Dépôt' }, { texte: 'Lecture en cours…' }]
+  if (!d.isGit) return [{ titre: 'Dépôt' }, { texte: 'Pas un dépôt git' }]
   const pluriel = (n, mot) => `${n} ${mot}${n > 1 ? 's' : ''}`
   return [
-    `Branche : ${d.branche}`,
-    d.isSuivie ? `À pousser : ${pluriel(d.aPousser, 'commit')}` : 'À pousser : branche jamais poussée',
-    ...(d.aTirer ? [`À tirer : ${pluriel(d.aTirer, 'commit')}`] : []),
-    `Non commité : ${pluriel(d.modifies, 'fichier')}`,
+    { titre: 'Dépôt', classe: 'avec-entetes' },
+    {
+      entetes: ['à pousser', 'à tirer', 'non commité'],
+      tableau: [{
+        titre: `branche : ${d.branche}`,
+        rangs: [[
+          d.isSuivie ? pluriel(d.aPousser, 'commit') : 'jamais poussée',
+          pluriel(d.aTirer, 'commit'),
+          pluriel(d.modifies, 'fichier'),
+        ]],
+      }],
+    },
   ]
 }
 const resumeDepot = d => d?.isGit && (d.aPousser || !d.isSuivie)
@@ -1392,7 +1401,7 @@ function ecrireInfos() {
     const c = s.etat.claude
     const gestionnaire = c.attente > 0 ? 'attend ses agents (cigare)'
       : c.isWorking ? (c.activity ?? 'réfléchit') : 'au repos (cigare)'
-    blocs.push({ titre: 'Dépôt' }, ...ficheDepot(s.etat.depot).map(texte => ({ texte })))
+    blocs.push(...ficheDepot(s.etat.depot))
     // Une section, comme un notebook : le gestionnaire en tête, puis
     // chaque agent qu'il a lancé (un filet plein), ses relecteurs sous lui (•••).
     // Un agent parti dont un relecteur travaille encore reste, en pâle.
